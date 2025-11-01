@@ -184,12 +184,15 @@ export class Zoom {
     this.zoomer = zoomer;
   }
 
-  set_highlit_points(dd: Qid[]) {
+  async set_highlit_points(dd: Qid[]) {
     const { x_, y_ } = this.scales();
     const xdim = this.scatterplot.dim('x') as PositionalAesthetic;
     const ydim = this.scatterplot.dim('y') as PositionalAesthetic;
     
-    const data = this.scatterplot.deeptable.getQids(dd)
+    const tiles = dd.map(([tix]) => this.scatterplot.deeptable.flatTree[tix]);
+    await Promise.all(tiles.map(t => t.get_column('trace_uuid')));
+
+    const data = this.scatterplot.deeptable.getQids(dd);
     this.scatterplot.highlit_point_change(dd, this.scatterplot);
 
     const annotations: Annotation[] = data.map((d, i) => {
@@ -244,9 +247,9 @@ export class Zoom {
       last_fired = Date.now();
       const p = renderer.color_pick(event.offsetX, event.offsetY);
       if (p === null) {
-        this.set_highlit_points([]);
+        void this.set_highlit_points([]);
       } else {
-        this.set_highlit_points([p]);
+        void this.set_highlit_points([p]);
       }
     });
   }

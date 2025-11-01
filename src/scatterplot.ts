@@ -584,14 +584,14 @@ export class Scatterplot {
   set tooltip_html(func: (d: StructRowProxy, plot: Scatterplot | undefined ) => string) {
     const deeptable = this.deeptable;
     this.tooltip_handler.f = function(e, plot) {
-     return func(deeptable.getQids([e])[0], plot);
+     return func(deeptable.getQids([e], ['trace_uuid'])[0], plot);
     }
   }
 
   set click_function(func: (d: StructRowProxy, plot: Scatterplot | undefined ) => void) {
     const deeptable = this.deeptable;
     this.click_handler.f = function(e, plot) {
-      func(deeptable.getQids([e])[0], plot);
+      func(deeptable.getQids([e], ['trace_uuid'])[0], plot);
     }
   }
 

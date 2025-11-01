@@ -1,44 +1,207 @@
-<!-- 
-  Hello! Assuming you've run a dataset with an x & y column
-  through quadfeather into a folder called tiles located in the
-  root of this repo, then this file should launch your scatter plot
-  exactly as is, no changes necessary.
-  It demonstrates the bare minimum needed to get started.
-  Checkout other examples for more advanced possibilities.
--->
-
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Deepscatter</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      background-color: #f0f2f5;
+    }
+    #deepscatter-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    #deepscatter {
+      width: 100%;
+      height: 100%;
+    }
+    #tooltip {
+      position: absolute;
+      display: none;
+      padding: 10px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      pointer-events: auto;
+      z-index: 10;
+    }
+    #detail-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 300px;
+      height: auto;
+      padding: 15px;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-family: 'Roboto Mono', monospace;
+      font-size: 14px;
+      overflow-y: auto;
+      z-index: 20;
+      display: none;
+    }
+    #detail-panel.open {
+      display: block;
+    }
+    #detail-panel h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: #333;
+    }
+    #detail-content a {
+      color: #1a73e8;
+      text-decoration: none;
+    }
+    #detail-content a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
 <body>
-  <div id="deepscatter"></div>
+  <div id="deepscatter-container">
+    <div id="deepscatter"></div>
+    <div id="tooltip"></div>
+    <div id="detail-panel">
+      <h2>Details</h2>
+      <pre id="detail-content"></pre>
+    </div>
+  </div>
+  <script type="module">
+    import { Scatterplot } from './src/deepscatter.ts';
+
+    const prefs = {
+      source_url: '/tiles',
+      max_points: 5000000, // Increased point count
+      alpha: 15, // Adjusted for smaller points
+      zoom_balance: 0.5, // Adjusted for smaller points
+      point_size: 2, // Smaller points
+      background_color: '#FFFFFF', // White background
+      encoding: {
+        x: { field: 'x', transform: 'literal' },
+        y: { field: 'y', transform: 'literal' },
+        color: { constant: '#4285F4' }, // Google Blue
+      },
+    };
+
+    const scatterplot = new Scatterplot('#deepscatter');
+    scatterplot.plotAPI(prefs);
+
+    const tooltip = document.getElementById('tooltip');
+    const detailPanel = document.getElementById('detail-panel');
+    const detailContent = document.getElementById('detail-content');
+
+    let tooltipLocked = false;
+    let selectedIx = null;
+
+    scatterplot.ready.then(() => {
+      scatterplot.tooltip_html = (datum) => {
+        if (tooltipLocked) return '';
+        const trace_uuid = datum.trace_uuid;
+        if (trace_uuid) {
+          tooltip.style.display = 'block';
+          tooltip.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
+        } else {
+          tooltip.style.display = 'none';
+        }
+        return '';
+      };
+
+      scatterplot.click_function = async (datum) => {
+        justClicked = true;
+        tooltipLocked = true;
+        selectedIx = datum.ix;
+        const trace_uuid = datum.trace_uuid;
+        tooltip.style.display = 'block';
+        if (trace_uuid) {
+          tooltip.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
+        }
+        detailPanel.classList.add('open');
+        if (trace_uuid) {
+          detailContent.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
+        } else {
+          detailContent.innerHTML = '';
+        }
+        const selection = await scatterplot.select_data({
+          id: [selectedIx],
+          key: 'ix',
+          name: 'clicked_point'
+        });
+        scatterplot.plotAPI({
+          encoding: {
+            color: {
+              field: selection.name,
+              range: ['#4285F4', '#0000FF'],
+            },
+            size: {
+              field: selection.name,
+              range: [2, 10],
+            }
+          }
+        })
+      };
+    });
+
+    let mousePosition = [0, 0];
+    document.addEventListener('mousemove', (event) => {
+      mousePosition = [event.clientX, event.clientY];
+      if (!tooltipLocked) {
+        tooltip.style.left = `${event.pageX + 10}px`;
+        tooltip.style.top = `${event.pageY + 10}px`;
+      }
+    });
+
+    let justClicked = false;
+    document.addEventListener('click', (event) => {
+      const clickedOnTooltip = tooltip.contains(event.target);
+      const clickedOnDetails = detailPanel.contains(event.target);
+
+      if (justClicked) {
+        justClicked = false;
+        return;
+      }
+
+      if (!clickedOnTooltip && !clickedOnDetails && selectedIx !== null) {
+        setTimeout(() => {
+          if (justClicked) return;
+          tooltipLocked = false;
+          tooltip.style.display = 'none';
+          detailPanel.classList.remove('open');
+          selectedIx = null;
+          scatterplot.plotAPI({
+            encoding: {
+              color: { constant: '#4285F4' },
+              size: { constant: 2 },
+            }
+          });
+        }, 100);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      const { zoom } = scatterplot;
+      const { transform } = zoom;
+      const panAmount = 100;
+      switch (event.key) {
+        case 'w':
+          zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);
+          break;
+        case 'a':
+          zoom.zoomer.translateBy(zoom.svg_element_selection, -panAmount, 0);
+          break;
+        case 's':
+          zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 0.8, mousePosition);
+          break;
+        case 'd':
+          zoom.zoomer.translateBy(zoom.svg_element_selection, panAmount, 0);
+          break;
+      }
+    });
+  </script>
 </body>
-
-<script type="module">
-  import { Scatterplot } from './src/deepscatter.ts';
-
-  const prefs = {
-    source_url: '/tiles', // the output of the quadfeather tiling engine
-    max_points: 1000000, // a full cap.
-    alpha: 25, // Target saturation for the full page.
-    zoom_balance: 0.7, // Rate at which points increase size. https://observablehq.com/@bmschmidt/zoom-strategies-for-huge-scatterplots-with-three-js
-    point_size: 5, // Default point size before application of size scaling
-    background_color: '#000000',
-    click_function: 'console.log(JSON.stringify(datum, undefined, 2))',
-
-    // encoding API based roughly on Vega Lite: https://vega.github.io/vega-lite/docs/encoding.html
-    encoding: {
-      x: {
-        field: 'x',
-        transform: 'literal',
-      },
-      y: {
-        field: 'y',
-        transform: 'literal',
-      },
-      color: {
-        constant: '#00ff00',
-      },
-    },
-  };
-
-  const scatterplot = new Scatterplot('#deepscatter');
-  scatterplot.plotAPI(prefs);
-</script>
+</html>
