@@ -1,17 +1,6 @@
-console.log('=== MAIN.JS SCRIPT START ===');
-
-try {
-  console.log('Importing modules...');
-} catch (error) {
-  console.error('Error at script start:', error);
-}
-
 import { Scatterplot } from './src/deepscatter.ts';
 import { scaleOrdinal } from 'd3-scale';
 import { schemeTableau10 } from 'd3-scale-chromatic';
-
-console.log('=== MAIN.JS LOADED ===');
-console.log('All imports successful');
 
 const prefs = {
   source_url: '/tiles',
@@ -31,11 +20,8 @@ const prefs = {
   },
 };
 
-console.log('Creating scatterplot...');
 const scatterplot = new Scatterplot('#deepscatter');
-console.log('Scatterplot created, calling plotAPI...');
 scatterplot.plotAPI(prefs);
-console.log('plotAPI called, waiting for ready...');
 
 const detailPanel = document.getElementById('detail-panel');
 const detailContent = document.getElementById('detail-content');
@@ -44,17 +30,16 @@ const legend = document.getElementById('legend');
 const filterContainer = document.getElementById('filter-container');
 const filterColumnSelector = document.getElementById('filter-column-selector');
 const filterValueContainer = document.getElementById('filter-value-container');
+const filterChipsContainer = document.getElementById('filter-chips-container');
 
 let tooltipLocked = false;
 let selectedIx = null;
 let numericColumns; // Declare in a higher scope
+let activeFilters = new Map(); // Track active filters: column -> {type, value, displayText}
 
 scatterplot.ready.then(async () => {
-  console.log('=== SCATTERPLOT READY ===');
   const allColumns = ['_device_name', '_build_id', 'startup_type', 'startup_dur', 'package'];
   numericColumns = new Set(['startup_dur']); // Assign in the ready callback
-  console.log('Columns defined:', allColumns);
-  console.log('Numeric columns:', Array.from(numericColumns));
 
   for (const colName of allColumns) {
     const colorOption = document.createElement('option');
@@ -71,31 +56,287 @@ scatterplot.ready.then(async () => {
     filterColumnSelector.appendChild(filterOption);
   }
 
+  function updateFilterChips() {
+    filterChipsContainer.innerHTML = '';
+    
+    for (const [column, filterInfo] of activeFilters) {
+      const chip = document.createElement('div');
+      chip.className = 'filter-chip';
+      
+      const chipText = document.createElement('span');
+      chipText.className = 'filter-chip-text';
+      chipText.textContent = filterInfo.displayText;
+      
+      const removeButton = document.createElement('button');
+      removeButton.className = 'filter-chip-remove';
+      removeButton.innerHTML = '×';
+      removeButton.title = 'Remove filter';
+      removeButton.addEventListener('click', () => {
+        removeFilter(column);
+      });
+      
+      chip.appendChild(chipText);
+      chip.appendChild(removeButton);
+      filterChipsContainer.appendChild(chip);
+    }
+  }
+  
+  async function removeFilter(column) {
+    activeFilters.delete(column);
+    updateFilterChips();
+    
+    // If no filters remain, reset all filters
+    if (activeFilters.size === 0) {
+      await scatterplot.plotAPI({
+        encoding: {
+          filter: null,
+          foreground: null,
+        },
+        background_options: {
+          opacity: 1.0,
+          size: 1.0,
+        },
+      });
+    } else {
+      // Reapply remaining filters
+      await applyAllFilters();
+    }
+  }
+  
+  async function applyAllFilters() {
+    if (activeFilters.size === 0) {
+      await scatterplot.plotAPI({
+        encoding: {
+          filter: null,
+          foreground: null,
+        },
+        background_options: {
+          opacity: 1.0,
+          size: 1.0,
+        },
+      });
+      return;
+    }
+    
+    // Create a combined selection that includes all active filters
+    const combinedSelectionName = `combined_filter_${Date.now()}`;
+    
+    try {
+      const selection = await scatterplot.deeptable.select_data({
+        name: combinedSelectionName,
+        tileFunction: async (tile) => {
+          const boolArray = new Uint8Array(Math.ceil(tile.record_batch.numRows / 8));
+          
+          // Start with all points selected (true)
+          for (let i = 0; i < tile.record_batch.numRows; i++) {
+            const byte = Math.floor(i / 8);
+            const bit = i % 8;
+            boolArray[byte] |= 1 << bit;
+          }
+          
+          // Apply each filter as an AND operation
+          for (const [column, filterInfo] of activeFilters) {
+            const isNumeric = numericColumns.has(column);
+            
+            if (isNumeric) {
+              const columnData = await tile.get_column(column);
+              const { minValue, maxValue } = filterInfo.value;
+              
+              // Apply numeric filter
+              for (let i = 0; i < tile.record_batch.numRows; i++) {
+                const value = columnData.get(i);
+                let passes = true;
+                
+                if (minValue !== null && !isNaN(minValue) && value <= minValue) {
+                  passes = false;
+                }
+                if (maxValue !== null && !isNaN(maxValue) && value >= maxValue) {
+                  passes = false;
+                }
+                
+                if (!passes) {
+                  const byte = Math.floor(i / 8);
+                  const bit = i % 8;
+                  boolArray[byte] &= ~(1 << bit); // Set bit to false
+                }
+              }
+            } else {
+              // Categorical filter
+              const columnData = await tile.get_column(column);
+              
+              for (let i = 0; i < tile.record_batch.numRows; i++) {
+                if (columnData.get(i) !== filterInfo.value) {
+                  const byte = Math.floor(i / 8);
+                  const bit = i % 8;
+                  boolArray[byte] &= ~(1 << bit); // Set bit to false
+                }
+              }
+            }
+          }
+          
+          const { Vector, makeData, Bool } = await import('apache-arrow');
+          const boolVector = new Vector([
+            makeData({
+              type: new Bool(),
+              data: boolArray,
+              length: tile.record_batch.numRows,
+            }),
+          ]);
+          
+          return boolVector;
+        }
+      });
+      
+      await selection.ready;
+      
+      await scatterplot.plotAPI({
+        encoding: {
+          foreground: {
+            field: combinedSelectionName,
+            op: 'eq',
+            a: 1,
+          },
+        },
+        background_options: {
+          opacity: 0.01,
+          size: 0.6,
+        },
+      });
+      
+    } catch (error) {
+      // Fallback: apply the most recent filter only
+      const [lastColumn, lastFilter] = Array.from(activeFilters).pop();
+      await applyFilterForColumn(lastColumn, lastFilter);
+    }
+  }
+  
+  async function applyFilterForColumn(column, filterInfo) {
+    const isNumeric = numericColumns.has(column);
+    
+    if (isNumeric) {
+      const { minValue, maxValue } = filterInfo.value;
+      
+      if (minValue !== null && maxValue !== null && !isNaN(minValue) && !isNaN(maxValue)) {
+        await scatterplot.plotAPI({
+          encoding: {
+            filter: {
+              field: column,
+              op: 'between',
+              a: minValue,
+              b: maxValue,
+            },
+          },
+          background_options: {
+            opacity: 0.01,
+            size: 0.6,
+          },
+        });
+      } else if (minValue !== null && !isNaN(minValue)) {
+        await scatterplot.plotAPI({
+          encoding: {
+            filter: {
+              field: column,
+              op: 'gt',
+              a: minValue,
+            },
+          },
+          background_options: {
+            opacity: 0.01,
+            size: 0.6,
+          },
+        });
+      } else if (maxValue !== null && !isNaN(maxValue)) {
+        await scatterplot.plotAPI({
+          encoding: {
+            filter: {
+              field: column,
+              op: 'lt',
+              a: maxValue,
+            },
+          },
+          background_options: {
+            opacity: 0.01,
+            size: 0.6,
+          },
+        });
+      }
+    } else {
+      // Categorical filter
+      const selectionName = `filter_${column}_${Date.now()}`;
+      
+      try {
+        const selection = await scatterplot.deeptable.select_data({
+          name: selectionName,
+          tileFunction: async (tile) => {
+            const columnData = await tile.get_column(column);
+            const boolArray = new Uint8Array(Math.ceil(tile.record_batch.numRows / 8));
+            
+            for (let i = 0; i < columnData.length; i++) {
+              if (columnData.get(i) === filterInfo.value) {
+                const byte = Math.floor(i / 8);
+                const bit = i % 8;
+                boolArray[byte] |= 1 << bit;
+              }
+            }
+            
+            const { Vector, makeData, Bool } = await import('apache-arrow');
+            const boolVector = new Vector([
+              makeData({
+                type: new Bool(),
+                data: boolArray,
+                length: tile.record_batch.numRows,
+              }),
+            ]);
+            
+            return boolVector;
+          }
+        });
+        
+        await selection.ready;
+        
+        await scatterplot.plotAPI({
+          encoding: {
+            foreground: {
+              field: selectionName,
+              op: 'eq',
+              a: 1,
+            },
+          },
+          background_options: {
+            opacity: 0.01,
+            size: 0.6,
+          },
+        });
+      } catch (error) {
+        await scatterplot.plotAPI({
+          encoding: {
+            filter: {
+              field: column,
+              lambda: (d) => {
+                return d === filterInfo.value;
+              },
+            },
+          },
+        });
+      }
+    }
+  }
+
   async function applyFilter() {
-    console.log('=== APPLY FILTER DEBUG ===');
     const filterColumn = filterColumnSelector.value;
     const isNumeric = numericColumns.has(filterColumn);
-    console.log('Filter column:', filterColumn);
-    console.log('Is numeric column:', isNumeric);
     
     let filterValue = null;
     let filterValueElement = null;
     
-    if (isNumeric) {
-      // For numeric columns, we don't use filterValue, we use min/max inputs directly
-      console.log('Numeric column - checking min/max inputs...');
-    } else {
+    if (!isNumeric) {
       // For categorical columns, get the dropdown value
       filterValueElement = document.getElementById('filter-value-input') || document.getElementById('filter-value-selector');
       filterValue = filterValueElement ? filterValueElement.value : null;
-      console.log('Filter value element:', filterValueElement);
-      console.log('Filter value:', filterValue);
-      console.log('Filter value type:', typeof filterValue);
     }
   
-    // Only reset filter if it's categorical and no value, or if it's numeric and no min/max values
+    // Only reset filter if it's categorical and no value
     if (!isNumeric && !filterValue) {
-      console.log('No categorical filter value, resetting filter...');
       // Reset filter - remove the filter entirely and reset background opacity
       await scatterplot.plotAPI({
         encoding: {
@@ -117,187 +358,65 @@ scatterplot.ready.then(async () => {
       const minValue = minInput ? parseFloat(minInput.value) : null;
       const maxValue = maxInput ? parseFloat(maxInput.value) : null;
       
-      console.log('Applying numeric range filter: field =', filterColumn, ', min =', minValue, ', max =', maxValue);
-      
-      if (minValue !== null && maxValue !== null && !isNaN(minValue) && !isNaN(maxValue)) {
-        // Both min and max specified - use between operation
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: {
-              field: filterColumn,
-              op: 'between',
-              a: minValue,
-              b: maxValue,
-            },
-          },
-          background_options: {
-            opacity: 0.01,
-            size: 0.6,
-          },
+      if ((minValue !== null && !isNaN(minValue)) || (maxValue !== null && !isNaN(maxValue))) {
+        // Create display text for the chip
+        let displayText = `${filterColumn}: `;
+        if (minValue !== null && !isNaN(minValue) && maxValue !== null && !isNaN(maxValue)) {
+          displayText += `${minValue} - ${maxValue}`;
+        } else if (minValue !== null && !isNaN(minValue)) {
+          displayText += `≥ ${minValue}`;
+        } else if (maxValue !== null && !isNaN(maxValue)) {
+          displayText += `≤ ${maxValue}`;
+        }
+        
+        // Add to active filters
+        activeFilters.set(filterColumn, {
+          type: 'numeric',
+          value: { minValue, maxValue },
+          displayText
         });
-      } else if (minValue !== null && !isNaN(minValue)) {
-        // Only min specified - use gt operation
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: {
-              field: filterColumn,
-              op: 'gt',
-              a: minValue,
-            },
-          },
-          background_options: {
-            opacity: 0.01,
-            size: 0.6,
-          },
-        });
-      } else if (maxValue !== null && !isNaN(maxValue)) {
-        // Only max specified - use lt operation
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: {
-              field: filterColumn,
-              op: 'lt',
-              a: maxValue,
-            },
-          },
-          background_options: {
-            opacity: 0.01,
-            size: 0.6,
-          },
-        });
+        
+        updateFilterChips();
+        await applyAllFilters();
       } else {
-        // No valid values - reset filter
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: null,
-            foreground: null,
-          },
-          background_options: {
-            opacity: 1.0,
-            size: 1.0,
-          },
-        });
+        // No valid values - remove filter if it exists
+        if (activeFilters.has(filterColumn)) {
+          activeFilters.delete(filterColumn);
+          updateFilterChips();
+          await applyAllFilters();
+        }
       }
     } else {
       // Check if "All" is selected (which means no filter)
       if (filterValue === 'All') {
-        console.log('All selected, resetting filter...');
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: null,
-            foreground: null,
-          },
-          background_options: {
-            opacity: 1.0,
-            size: 1.0,
-          },
-        });
+        // Remove filter if it exists
+        if (activeFilters.has(filterColumn)) {
+          activeFilters.delete(filterColumn);
+          updateFilterChips();
+          await applyAllFilters();
+        }
         return;
       }
 
-      // For categorical data, let's use the selection system with proper API
-      console.log('Applying categorical filter using selection system: field =', filterColumn, ', value =', filterValue);
+      // Add to active filters
+      activeFilters.set(filterColumn, {
+        type: 'categorical',
+        value: filterValue,
+        displayText: `${filterColumn}: ${filterValue}`
+      });
       
-      // Let's also check what data we actually have in the first few rows
-      try {
-        const sampleData = await scatterplot.deeptable.root_tile.get_column(filterColumn);
-        console.log('Sample data from column:', Array.from(sampleData.slice(0, 10)));
-        console.log('Looking for value:', filterValue);
-        console.log('Value exists in sample:', Array.from(sampleData.slice(0, 100)).includes(filterValue));
-      } catch (error) {
-        console.error('Error getting sample data:', error);
-      }
-      
-      // Create a selection for the filtered data
-      const selectionName = `filter_${filterColumn}_${Date.now()}`;
-      console.log('Creating selection:', selectionName);
-      
-      try {
-        const selection = await scatterplot.deeptable.select_data({
-          name: selectionName,
-          tileFunction: async (tile) => {
-            console.log('Processing tile for selection...');
-            const column = await tile.get_column(filterColumn);
-            
-            // Create a boolean array manually
-            const boolArray = new Uint8Array(Math.ceil(tile.record_batch.numRows / 8));
-            let matchCount = 0;
-            
-            for (let i = 0; i < column.length; i++) {
-              if (column.get(i) === filterValue) {
-                const byte = Math.floor(i / 8);
-                const bit = i % 8;
-                boolArray[byte] |= 1 << bit;
-                matchCount++;
-              }
-            }
-            
-            console.log('Boolean array created, matches found:', matchCount);
-            
-            // Create Arrow Bool Vector manually
-            const { Vector, makeData, Bool } = await import('apache-arrow');
-            const boolVector = new Vector([
-              makeData({
-                type: new Bool(),
-                data: boolArray,
-                length: tile.record_batch.numRows,
-              }),
-            ]);
-            
-            return boolVector;
-          }
-        });
-        
-        await selection.ready;
-        console.log('Selection ready, applying as foreground filter...');
-        
-        // Use the selection as a foreground filter with reduced background opacity
-        await scatterplot.plotAPI({
-          encoding: {
-            foreground: {
-              field: selectionName,
-              op: 'eq',
-              a: 1,
-            },
-          },
-          background_options: {
-            opacity: 0.01, // Extremely low opacity for background points to prevent clustering darkness
-            size: 0.6, // Much smaller background points
-          },
-        });
-        
-      } catch (error) {
-        console.error('Error creating selection:', error);
-        // Fallback to trying the lambda approach again
-        console.log('Falling back to lambda approach...');
-        await scatterplot.plotAPI({
-          encoding: {
-            filter: {
-              field: filterColumn,
-              lambda: (d) => {
-                console.log('Lambda filter checking:', d, 'against', filterValue, 'result:', d === filterValue);
-                return d === filterValue;
-              },
-            },
-          },
-        });
-      }
+      updateFilterChips();
+      await applyAllFilters();
     }
-    console.log('Filter applied successfully');
   }
   
   async function updateFilterValueInput() {
-    console.log('=== UPDATE FILTER VALUE INPUT DEBUG ===');
     const filterColumn = filterColumnSelector.value;
-    console.log('Filter column:', filterColumn);
-    console.log('numericColumns set:', Array.from(numericColumns));
     const isNumeric = numericColumns.has(filterColumn);
-    console.log('Is numeric:', isNumeric);
 
     filterValueContainer.innerHTML = '';
 
     if (isNumeric) {
-      console.log('Creating min/max inputs for numeric filter.');
       
       // Create a container for the min/max inputs
       const rangeContainer = document.createElement('div');
@@ -311,19 +430,13 @@ scatterplot.ready.then(async () => {
       minInput.type = 'number';
       minInput.placeholder = 'Min';
       minInput.style.width = '48%';
-      console.log('Created min input:', minInput);
       minInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
-          console.log('Enter pressed on min input, applying filter...');
           void applyFilter();
         }
       });
       minInput.addEventListener('change', () => {
-        console.log('Min input changed, applying filter...');
         void applyFilter();
-      });
-      minInput.addEventListener('input', () => {
-        console.log('Min input value changed:', minInput.value);
       });
       
       // Max input
@@ -332,29 +445,19 @@ scatterplot.ready.then(async () => {
       maxInput.type = 'number';
       maxInput.placeholder = 'Max';
       maxInput.style.width = '48%';
-      console.log('Created max input:', maxInput);
       maxInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
-          console.log('Enter pressed on max input, applying filter...');
           void applyFilter();
         }
       });
       maxInput.addEventListener('change', () => {
-        console.log('Max input changed, applying filter...');
         void applyFilter();
-      });
-      maxInput.addEventListener('input', () => {
-        console.log('Max input value changed:', maxInput.value);
       });
       
       rangeContainer.appendChild(minInput);
       rangeContainer.appendChild(maxInput);
       filterValueContainer.appendChild(rangeContainer);
-      console.log('Min/max inputs appended to container');
-      console.log('Min input in DOM:', document.getElementById('filter-min-input'));
-      console.log('Max input in DOM:', document.getElementById('filter-max-input'));
     } else {
-      console.log('Creating dropdown for categorical filter.');
       const select = document.createElement('select');
       select.id = 'filter-value-selector';
       
@@ -379,7 +482,6 @@ scatterplot.ready.then(async () => {
       }
   
       const uniqueValues = Array.from(allValues).sort(); // Sort for better UX
-      console.log('Unique values for dropdown:', uniqueValues);
       for (const val of uniqueValues) {
         const option = document.createElement('option');
         option.value = val;
@@ -390,13 +492,10 @@ scatterplot.ready.then(async () => {
         void applyFilter();
       });
       filterValueContainer.appendChild(select);
-      console.log('Dropdown created and appended.');
     }
   }
   
   filterColumnSelector.addEventListener('change', () => {
-    console.log('=== FILTER COLUMN CHANGED ===');
-    console.log('Filter column selector changed to:', filterColumnSelector.value);
     void updateFilterValueInput();
   });
 
@@ -488,7 +587,6 @@ scatterplot.ready.then(async () => {
   colorColumnSelector.dispatchEvent(new Event('change'));
 
   // Trigger initial filter render
-  console.log('Triggering initial filter render...');
   void updateFilterValueInput();
 
   scatterplot.click_function = async (datum, plot, ev) => {
