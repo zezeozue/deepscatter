@@ -15,13 +15,6 @@ export type Rectangle = {
   y: MinMax;
 };
 
-// interface schema_entry {
-//   name: string;
-//   type: string;
-//   extent: Array<any>;
-//   keys?: Array<any>;
-// }
-
 import type { ArrowBuildable, TileMetadata } from './types';
 import { tixToChildren, tixToZxy, zxyToTix } from './tixrixqid';
 
@@ -447,16 +440,6 @@ export class Tile {
       bufferPromise = fetch(url, request).then((response) =>
         response.arrayBuffer(),
       );
-      // Prefetching
-      for (const sibling of this.macro_siblings) {
-        if (sibling !== this.key) {
-          let sibling_url = `${this.deeptable.base_url}/${sibling}.feather`;
-          if (suffix !== null) {
-            sibling_url = sibling_url.replace(/.feather/, `.${suffix}.feather`);
-          }
-          void fetch(sibling_url, request);
-        }
-      }
     }
     const batch = bufferPromise.then((buffer) => {
       return tableFromIPC(buffer).batches[0];

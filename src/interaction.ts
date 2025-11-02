@@ -82,6 +82,7 @@ export class Zoom {
         return;
       }
       const renderer = this.renderers.get('regl') as ReglRenderer;
+      // Conservative settings: 1 tile at a time, low priority, longer throttle
       deeptable.spawnDownloads(
         this.current_corners(),
         renderer.props.max_ix,
@@ -89,7 +90,7 @@ export class Zoom {
         renderer.aes.neededFields.map((x) => x[0]),
         'high',
       );
-    }, 100);
+    }, 500); // Increased throttle from 100ms to 500ms
   }
 
   attach_tiles(tiles: Deeptable) {
@@ -191,13 +192,18 @@ export class Zoom {
         // Update the radius of the hover circle on zoom
         const current_size = this.scatterplot.prefs.point_size;
         const new_radius = current_size * Math.sqrt(this.transform.k) * 0.6; // Halved the multiplier
-        this.svg_element_selection.selectAll('circle.label').attr('r', new_radius);
+        this.svg_element_selection
+          .selectAll('circle.label')
+          .attr('r', new_radius);
 
         this.scatterplot.on_zoom?.(event.transform);
+
+        // Only trigger downloads on user-initiated events (not programmatic zoom)
         if (event.sourceEvent) {
+          this.throttled_spawn_downloads();
           (event.sourceEvent as Event).stopPropagation();
         }
-      })
+      });
 
     canvas.call(zoomer);
 
@@ -225,7 +231,7 @@ export class Zoom {
     const { x_, y_ } = this.scales();
     const xdim = this.scatterplot.dim('x') as PositionalAesthetic;
     const ydim = this.scatterplot.dim('y') as PositionalAesthetic;
-    
+
     const fields = [
       'trace_uuid',
       '_device_name',
@@ -281,8 +287,7 @@ export class Zoom {
             .attr('cx', (d) => x_(xdim.apply(d.data)))
             .attr('cy', (d) => y_(ydim.apply(d.data))),
 
-        (update) =>
-          update, // Do not change fill on update
+        (update) => update, // Do not change fill on update
         (exit) =>
           exit.call((e) => {
             e.remove();

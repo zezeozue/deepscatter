@@ -29,14 +29,7 @@ import {
   dimensions,
 } from './aesthetics/StatefulAesthetic';
 import { Scatterplot } from './scatterplot';
-import {
-  Data,
-  Dictionary,
-  Struct,
-  Type,
-  Utf8,
-  Vector,
-} from 'apache-arrow';
+import { Data, Dictionary, Struct, Type, Utf8, Vector } from 'apache-arrow';
 import { Color } from './aesthetics/ColorAesthetic';
 import { StatefulAesthetic } from './aesthetics/StatefulAesthetic';
 import { Filter, Foreground } from './aesthetics/BooleanAesthetic';
@@ -277,19 +270,6 @@ export class ReglRenderer extends Renderer {
     const { prefs, deeptable, props } = this;
     this.tick_num = this.tick_num || 0;
     this.tick_num++;
-    // Set a download call in motion.
-    if (this._use_scale_to_download_tiles) {
-      this.zoom.throttled_spawn_downloads();
-    } else {
-      // console.warn("No good rules here yet.")
-      deeptable.spawnDownloads(
-        undefined,
-        prefs.max_points,
-        5,
-        this.aes.neededFields.map((x) => x[0]),
-        'high',
-      );
-    }
 
     try {
       this.render_all(props);
@@ -554,7 +534,7 @@ export class ReglRenderer extends Renderer {
     if (row_number === -1) {
       return null;
     }
-    return [tile_number, row_number]
+    return [tile_number, row_number];
   }
 
   color_pick_single(
