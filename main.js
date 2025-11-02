@@ -15,7 +15,7 @@ const prefs = {
     color: {
       field: 'dur',
       transform: 'log',
-      range: ['#fde725', '#21918c']
+      range: ['#fde725', '#a0da39', '#4ac16d', '#1fa187', '#277f8e', '#365c8d', '#46327e', '#440154']
     },
   },
 };
@@ -206,7 +206,6 @@ scatterplot.ready.then(async () => {
       });
       
       // Update legend after filter is applied
-      console.log('Dispatching change event to update legend');
       await updateColorEncoding();
     } catch (error) {
       console.error('Error applying combined filters:', error);
@@ -507,20 +506,38 @@ scatterplot.ready.then(async () => {
   });
 
   function updateLegend(colorEncoding, globalMapping) {
-    console.log('updateLegend called with:', { colorEncoding, globalMapping });
     legend.innerHTML = '';
     if (colorEncoding.transform === 'log') {
-      // Simple gradient for numeric data
+      // Create gradient for numeric data
+      let gradientColors;
+      if (colorEncoding.range.length > 2) {
+        // Multi-color gradient
+        gradientColors = colorEncoding.range.join(', ');
+      } else {
+        // Two-color gradient
+        gradientColors = `${colorEncoding.range[0]}, ${colorEncoding.range[1]}`;
+      }
+      
+      // Add labels for duration to show the range
+      let rangeLabels = '';
+      if (colorEncoding.field === 'dur') {
+        rangeLabels = `
+          <div style="display: flex; justify-content: space-between; font-size: 10px; margin-top: 2px; color: #666;">
+            <span>~100ms</span>
+            <span>~1s</span>
+            <span>~10s+</span>
+          </div>
+        `;
+      }
+      
       legend.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <div style="width: 20px; height: 20px; background: linear-gradient(to right, ${colorEncoding.range[0]}, ${colorEncoding.range[1]});"></div>
-          <span style="margin-left: 5px;">${colorEncoding.field} (log scale)</span>
+        <div style="display: flex; flex-direction: column;">
+          <div style="width: 100%; height: 20px; background: linear-gradient(to right, ${gradientColors});"></div>
+          ${rangeLabels}
         </div>
       `;
-      console.log('Updated legend for numeric data');
     } else if (globalMapping) {
       // Categorical legend
-      console.log(`Creating legend for ${Object.keys(globalMapping).length} categories`);
       for (const [value, index] of Object.entries(globalMapping)) {
         const color = colorEncoding.range[index % colorEncoding.range.length];
         legend.innerHTML += `
@@ -530,31 +547,35 @@ scatterplot.ready.then(async () => {
           </div>
         `;
       }
-      console.log('Updated legend for categorical data');
-    } else {
-      console.log('No legend update - no globalMapping provided');
     }
   }
 
   async function updateColorEncoding() {
-    console.log('Color column changed');
     const newColorColumn = colorColumnSelector.value;
     const isNumeric = numericColumns.has(newColorColumn);
-    console.log(`New color column: ${newColorColumn}, isNumeric: ${isNumeric}`);
 
     let colorEncoding;
     let globalMapping = null;
 
     if (isNumeric) {
-      colorEncoding = {
-        field: newColorColumn,
-        transform: 'log',
-        range: ['#fde725', '#21918c'],
-      };
+      // For duration, use a multi-color scale that better captures the dynamic range
+      if (newColorColumn === 'dur') {
+        colorEncoding = {
+          field: newColorColumn,
+          transform: 'log',
+          range: ['#fde725', '#a0da39', '#4ac16d', '#1fa187', '#277f8e', '#365c8d', '#46327e', '#440154'], // Extended viridis: light yellow to dark purple
+        };
+      } else {
+        // For other numeric columns, use the original two-color scale
+        colorEncoding = {
+          field: newColorColumn,
+          transform: 'log',
+          range: ['#fde725', '#21918c'],
+        };
+      }
     } else {
       const allValues = new Set();
       const visible_tiles = scatterplot.renderer.visible_tiles();
-      console.log(`Found ${visible_tiles.length} visible tiles`);
       
       // Apply active filters to determine which values should be in the legend
       const promises = visible_tiles.map(async (tile) => {
@@ -562,8 +583,6 @@ scatterplot.ready.then(async () => {
         
         // If there are active filters, only include values from rows that pass all filters
         if (activeFilters.size > 0) {
-          console.log(`Applying ${activeFilters.size} active filters to legend data`);
-          
           // Get all filter columns for this tile
           const filterColumns = new Map();
           for (const [filterColumn] of activeFilters) {
@@ -615,7 +634,6 @@ scatterplot.ready.then(async () => {
       await Promise.all(promises);
 
       const uniqueValues = Array.from(allValues);
-      console.log('Unique values from filtered data:', uniqueValues);
       globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
 
       const factorizedColumnName = `${newColorColumn}__factorized`;
@@ -644,13 +662,11 @@ scatterplot.ready.then(async () => {
       };
     }
     
-    console.log('Updating plot with new color encoding:', colorEncoding);
     await scatterplot.plotAPI({
       encoding: {
         color: colorEncoding,
       },
     });
-    console.log('Updating legend with mapping:', globalMapping);
     updateLegend(colorEncoding, globalMapping);
   }
 
@@ -770,7 +786,7 @@ document.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => {
   const { zoom } = scatterplot;
   const { transform } = zoom;
-  const panAmount = 25;
+  const panAmount = 10; // Reduced from 25 to 10 for smoother movement
   switch (event.key) {
     case 'w':
       zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);
@@ -780,17 +796,17 @@ document.addEventListener('keydown', (event) => {
       break;
     case 'a':
     case 'ArrowLeft':
-      zoom.zoomer.translateBy(zoom.svg_element_selection, panAmount, 0);
+      zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), panAmount, 0);
       break;
     case 'd':
     case 'ArrowRight':
-      zoom.zoomer.translateBy(zoom.svg_element_selection, -panAmount, 0);
+      zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), -panAmount, 0);
       break;
     case 'ArrowUp':
-      zoom.zoomer.translateBy(zoom.svg_element_selection, 0, panAmount);
+      zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), 0, panAmount);
       break;
     case 'ArrowDown':
-      zoom.zoomer.translateBy(zoom.svg_element_selection, 0, -panAmount);
+      zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), 0, -panAmount);
       break;
   }
 });
