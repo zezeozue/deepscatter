@@ -1,11 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Svelte Application</title>
+  <title>Deepscatter</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <script type="module" src="/dev/main.ts"></script>
+  <div id="deepscatter-container">
+    <div id="deepscatter"></div>
+    <div id="left-panel">
+      <div id="header">
+        <h1>Deepscatter</h1>
+      </div>
+      <div id="controls">
+        <select id="color-column-selector"></select>
+        <div id="detail-panel">
+          <pre id="detail-content"></pre>
+        </div>
+        <div id="legend"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="main.js"></script>
 </body>
 </html>

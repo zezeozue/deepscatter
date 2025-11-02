@@ -1,4 +1,4 @@
-import { Scatterplot } from '../../src/deepscatter.ts';
+import { Scatterplot } from './src/deepscatter.ts';
 import { scaleOrdinal } from 'd3-scale';
 import { schemeTableau10 } from 'd3-scale-chromatic';
 
@@ -231,14 +231,22 @@ document.addEventListener('keydown', (event) => {
     case 'w':
       zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);
       break;
-    case 'a':
-      zoom.zoomer.translateBy(zoom.svg_element_selection, -panAmount, 0);
-      break;
     case 's':
       zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 0.8, mousePosition);
       break;
-    case 'd':
+    case 'a':
+    case 'ArrowLeft':
       zoom.zoomer.translateBy(zoom.svg_element_selection, panAmount, 0);
+      break;
+    case 'd':
+    case 'ArrowRight':
+      zoom.zoomer.translateBy(zoom.svg_element_selection, -panAmount, 0);
+      break;
+    case 'ArrowUp':
+      zoom.zoomer.translateBy(zoom.svg_element_selection, 0, panAmount);
+      break;
+    case 'ArrowDown':
+      zoom.zoomer.translateBy(zoom.svg_element_selection, 0, -panAmount);
       break;
   }
 });

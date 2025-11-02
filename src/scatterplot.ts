@@ -6,7 +6,6 @@ import { neededFieldsToPlot, ReglRenderer } from './regl_rendering';
 import { tableFromIPC, type StructRowProxy } from 'apache-arrow';
 import { Deeptable } from './Deeptable';
 import type { FeatureCollection } from 'geojson';
-import { LabelMaker } from './label_rendering';
 import { Renderer } from './rendering';
 import type { ConcreteAesthetic } from './aesthetics/StatefulAesthetic';
 import { isURLLabels, isLabelset } from './typing';
@@ -70,7 +69,6 @@ export class Scatterplot {
   public click_handler: ClickFunction;
   private hooks: Record<string, Hook> = {};
   public tooltip_handler: TooltipHTML;
-  public label_click_handler: LabelClick;
   public handle_highlit_point_change: ChangeToHighlitPointFunction;
   // In order to preserve JSON serializable nature of prefs, the consumer directly sets this
   public on_zoom?: DS.onZoomCallback;
@@ -123,7 +121,6 @@ export class Scatterplot {
 
     this.click_handler = new ClickFunction(this);
     this.tooltip_handler = new TooltipHTML(this);
-    this.label_click_handler = new LabelClick(this);
     this.handle_highlit_point_change = new ChangeToHighlitPointFunction(this);
 
     // Attach the deeptable if a method for it was defined.
@@ -273,60 +270,6 @@ export class Scatterplot {
     this.deeptable.add_label_identifiers(true_codes, name, key_field);
   }
 
-  async add_labels_from_url(
-    url: string,
-    name: string,
-    label_key: string,
-    size_key: string | undefined,
-    options: DS.LabelOptions,
-  ): Promise<void> {
-    await this.ready;
-
-    await this.deeptable.promise;
-    return fetch(url)
-      .then(async (data) => {
-        const features = await (data.json() as Promise<FeatureCollection>);
-        this.add_labels(features, name, label_key, size_key, options);
-      })
-      .catch((error) => {
-        console.warn(error);
-        console.error('Broken addition of ', name);
-        //        this.stop_labellers();
-      });
-  }
-  /**
-   *
-   * @param features A geojson feature collection containing point labels
-   * @param name A unique key to associate with this labelset. Labels can be enabled or disabled using this key.
-   * @param label_key The text field in which the labels are stored in the geojson object.
-   * @param size_key A field in the deeptable to associate with the *size* of the labels.
-   * @param label_options Additional custom passed to the labeller.
-   *
-   * Usage:
-   *
-   * To add a set of labels to your map, create a geojson array of points where
-   * the 'properties' field contains a column to use for labels. E.g., each entry might look like
-   * this. Each feature will be inserted into a label hierarchy to attempt to avoid inclusion.
-   * If the label_key corresponds to the currently active color dimension on your map,
-   * the labels will be drawn with appropriately colored outlines: otherwise, they will
-   * all have a black outline.
-   * **Currently it is necessary that labels be inserted in order**.
-   *
-   *
-   */
-  add_labels(
-    features: FeatureCollection,
-    name: string,
-    label_key: string,
-    size_key: string | undefined,
-    options: DS.LabelOptions = {},
-  ) {
-    const labels = new LabelMaker(this, name, options);
-    labels.update(features, label_key, size_key);
-    this.secondary_renderers[name] = labels;
-    const r = this.secondary_renderers[name] as LabelMaker;
-    r.start();
-  }
 
   /**
    * An alias to avoid using the underscored method directly.
@@ -338,31 +281,6 @@ export class Scatterplot {
     return this._root;
   }
 
-  add_api_label(labelset: DS.Labelset) {
-    const geojson: FeatureCollection = {
-      type: 'FeatureCollection',
-      features: labelset.labels.map((label: DS.Label) => {
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [label.x, label.y],
-          },
-          properties: {
-            text: label.text,
-            size: label.size || undefined,
-          },
-        };
-      }),
-    };
-    this.add_labels(
-      geojson,
-      labelset.name,
-      'text',
-      'size',
-      labelset.options || {},
-    );
-  }
 
   async load_deeptable({
     source_url,
@@ -558,16 +476,6 @@ export class Scatterplot {
     delete this.hooks[name];
   }
 
-  public stop_labellers() {
-    for (const [k, v] of Object.entries(this.secondary_renderers)) {
-      // Stop any existing labels
-      if (v && v['label_key'] !== undefined) {
-        (this.secondary_renderers[k] as LabelMaker).stop();
-        (this.secondary_renderers[k] as LabelMaker).delete();
-        delete this.secondary_renderers[k];
-      }
-    }
-  }
 
   /**
    *
@@ -589,17 +497,6 @@ export class Scatterplot {
     this.click_handler.f = func;
   }
 
-  set label_click(
-    func: (d: Record<string, unknown>, scatterplot: Scatterplot) => void,
-  ) {
-    this.label_click_handler.f = func;
-  }
-
-  get label_click(): LabelClick['f'] {
-    return this.label_click_handler.f.bind(
-      this.label_click_handler,
-    ) as LabelClick['f'];
-  }
 
   set highlit_point_change(
     func: (datum: Qid[], plot: Scatterplot) => void,
@@ -779,35 +676,6 @@ export class Scatterplot {
       renderer.tick();
     });
 
-    if (prefs.labels !== undefined) {
-      if (isURLLabels(prefs.labels)) {
-        const { url, label_field, size_field } = prefs.labels;
-        const name = url;
-        if (!this.secondary_renderers[name]) {
-          this.stop_labellers();
-          this.add_labels_from_url(
-            url,
-            name,
-            label_field,
-            size_field,
-            {},
-          ).catch((error) => {
-            console.error('Label addition failed.');
-            console.error(error);
-          });
-        }
-      } else if (isLabelset(prefs.labels)) {
-        if (!prefs.labels.name) {
-          throw new Error('API field `labels` must have a name.');
-        }
-        this.stop_labellers();
-        this.add_api_label(prefs.labels);
-      } else if (prefs.labels === null) {
-        this.stop_labellers();
-      } else {
-        throw new Error('API field `labels` format not recognized.');
-      }
-    }
 
     zoom.restart_timer(60_000);
   }
@@ -877,21 +745,6 @@ import type { GeoJsonProperties } from 'geojson';
 import { default_API_call } from './defaults';
 import type { Qid } from './tixrixqid';
 
-class LabelClick extends SettableFunction<void, GeoJsonProperties> {
-  default(
-    feature: GeoJsonProperties,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    plot: Scatterplot | undefined = undefined,
-    labelset: LabelMaker | undefined = undefined,
-  ) {
-    if (feature === null) {
-      return;
-    }
-    if (labelset === null) {
-      return;
-    }
-  }
-}
 
 class ClickFunction extends SettableFunction<void, StructRowProxy> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

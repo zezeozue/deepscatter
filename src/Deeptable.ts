@@ -27,7 +27,6 @@ import {
   Struct,
 } from 'apache-arrow';
 import { Scatterplot } from './scatterplot';
-import { wrapArrowTable } from './wrap_arrow';
 import type {
   BooleanColumnParams,
   CompositeSelectParams,
@@ -354,7 +353,7 @@ export class Deeptable {
     table: Table,
     plot: Scatterplot | null = null,
   ): Deeptable {
-    return wrapArrowTable(tableToIPC(table), plot);
+    throw new Error("`fromArrowTable` has been removed to simplify the library.")
   }
 
   /**
