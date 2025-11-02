@@ -91,7 +91,6 @@ export class ReglRenderer extends Renderer {
         'OES_standard_derivatives',
         'OES_element_index_uint',
         'OES_texture_float',
-        'OES_texture_half_float',
       ],
       canvas: c,
     });
@@ -280,13 +279,7 @@ export class ReglRenderer extends Renderer {
     this.tick_num++;
     // Set a download call in motion.
     if (this._use_scale_to_download_tiles) {
-      deeptable.spawnDownloads(
-        this.zoom.current_corners(),
-        this.props.max_ix,
-        5,
-        this.aes.neededFields.map((x) => x[0]),
-        'high',
-      );
+      this.zoom.throttled_spawn_downloads();
     } else {
       // console.warn("No good rules here yet.")
       deeptable.spawnDownloads(
@@ -1117,7 +1110,7 @@ export class BufferManager {
         // 64-bit timestamped are internally represented as two 32-bit ints in the arrow arrays.
         // This does a moderately expensive copy as a stopgap.
         // This problem may creep up in other 64-bit types as we go, so keep an eye out.
-        const copy = new Int32Array(source_buffer.values).buffer;
+        const copy = new Int32Array(source_buffer.values as any).buffer;
         const view64 = new BigInt64Array(copy);
         const timetype = column.type.unit as number;
         // All times are represented as milliseconds on the

@@ -447,6 +447,16 @@ export class Tile {
       bufferPromise = fetch(url, request).then((response) =>
         response.arrayBuffer(),
       );
+      // Prefetching
+      for (const sibling of this.macro_siblings) {
+        if (sibling !== this.key) {
+          let sibling_url = `${this.deeptable.base_url}/${sibling}.feather`;
+          if (suffix !== null) {
+            sibling_url = sibling_url.replace(/.feather/, `.${suffix}.feather`);
+          }
+          void fetch(sibling_url, request);
+        }
+      }
     }
     const batch = bufferPromise.then((buffer) => {
       return tableFromIPC(buffer).batches[0];

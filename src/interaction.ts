@@ -6,6 +6,7 @@ import { timer } from 'd3-timer';
 import { D3ZoomEvent, zoom, zoomIdentity } from 'd3-zoom';
 import { mean } from 'd3-array';
 import { ScaleLinear, scaleLinear } from 'd3-scale';
+import { throttle } from 'lodash';
 // import { annotation, annotationLabel } from 'd3-svg-annotation';
 import type { Renderer } from './rendering';
 import { ReglRenderer } from './regl_rendering';
@@ -57,6 +58,7 @@ export class Zoom {
   public _start?: number;
   public scatterplot: Scatterplot;
   private stopTimerAt?: number;
+  public throttled_spawn_downloads: () => void;
   constructor(selector: string, prefs: DS.APICall, plot: Scatterplot) {
     // There can be many canvases that display the zoom, but
     // this is initialized with the topmost most one that
@@ -73,6 +75,21 @@ export class Zoom {
     // that it's in charge of adjusting.
 
     this.renderers = new Map();
+
+    this.throttled_spawn_downloads = throttle(() => {
+      const deeptable = this.deeptable;
+      if (deeptable === undefined) {
+        return;
+      }
+      const renderer = this.renderers.get('regl') as ReglRenderer;
+      deeptable.spawnDownloads(
+        this.current_corners(),
+        renderer.props.max_ix,
+        5,
+        renderer.aes.neededFields.map((x) => x[0]),
+        'high',
+      );
+    }, 100);
   }
 
   attach_tiles(tiles: Deeptable) {

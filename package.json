@@ -76,6 +76,7 @@
     "@types/d3-scale-chromatic": "^3.0.3",
     "@types/d3-selection": "^3.0.10",
     "@types/geojson": "^7946.0.14",
+    "@types/lodash": "^4.17.20",
     "@types/lodash.merge": "^4.6.9",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
