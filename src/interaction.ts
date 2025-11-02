@@ -187,6 +187,21 @@ export class Zoom {
     this.add_mouseover();
 
     this.zoomer = zoomer;
+
+    this.svg_element_selection.on('click', (ev: MouseEvent) => {
+      if (ev.ctrlKey || ev.metaKey) {
+        const p = (this.renderers.get('regl') as ReglRenderer).color_pick(
+          ev.offsetX,
+          ev.offsetY,
+        );
+        if (p) {
+          const d = this.scatterplot.deeptable.getQids([p]);
+          if (d && d[0]) {
+            this.scatterplot.click_handler.f(d[0], this.scatterplot, ev);
+          }
+        }
+      }
+    });
   }
 
   async set_highlit_points(dd: Qid[]) {
@@ -215,7 +230,7 @@ export class Zoom {
     }
     await tile.require_columns(fields);
     const data = this.scatterplot.deeptable.getQids(dd);
-    this.scatterplot.highlit_point_change(dd, this.scatterplot);
+    this.scatterplot.highlit_point_change(dd, this.scatterplot, undefined);
 
     const annotations: Annotation[] = data.map((d, i) => {
       return {
@@ -257,7 +272,8 @@ export class Zoom {
           }),
       )
       .on('click', (ev, dd) => {
-        this.scatterplot.click_handler.f(dd.data, this.scatterplot);
+        ev.stopPropagation();
+        this.scatterplot.click_handler.f(dd.data, this.scatterplot, ev);
       });
   }
 

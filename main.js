@@ -133,7 +133,17 @@ scatterplot.ready.then(async () => {
   // Trigger initial legend render
   colorColumnSelector.dispatchEvent(new Event('change'));
 
-  scatterplot.click_function = async (datum) => {
+  scatterplot.click_function = async (datum, plot, ev) => {
+    if (ev.ctrlKey || ev.metaKey) {
+      const trace = datum['trace_uuid'];
+      if (trace) {
+        window.open(
+          `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`,
+          '_blank',
+        );
+      }
+      return;
+    }
     justClicked = true;
     tooltipLocked = true;
     selectedIx = datum.ix;
@@ -153,7 +163,7 @@ scatterplot.ready.then(async () => {
 
     output += `${deviceName}\n`;
     if (traceUuid) {
-      output += `<a href="http://go/trace-uuid/${traceUuid}" target="_blank">${traceUuid}</a>\n`;
+      output += `<a href="https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${traceUuid}&query=" target="_blank">${traceUuid}</a>\n`;
     }
     output += `${buildId}\n`;
     output += `${startupType}\n`;

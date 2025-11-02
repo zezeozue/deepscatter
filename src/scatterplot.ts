@@ -489,17 +489,21 @@ export class Scatterplot {
     return this._renderer.aes.dim(dimension).current;
   }
 
-  set tooltip_html(func: (d: StructRowProxy, plot: Scatterplot | undefined ) => string) {
-    this.tooltip_handler.f = func
+  set tooltip_html(
+    func: (d: StructRowProxy, plot: Scatterplot | undefined) => string,
+  ) {
+    this.tooltip_handler.f = func;
   }
 
-  set click_function(func: (d: StructRowProxy, plot: Scatterplot) => void) {
+  set click_function(
+    func: (d: StructRowProxy, plot: Scatterplot, ev: MouseEvent) => void,
+  ) {
     this.click_handler.f = func;
   }
 
 
   set highlit_point_change(
-    func: (datum: Qid[], plot: Scatterplot) => void,
+    func: (datum: Qid[], plot: Scatterplot, ev?: MouseEvent) => void,
   ) {
     /**
      * A lower-level handler for point changes. This takes Qids
@@ -719,7 +723,9 @@ export class Scatterplot {
  A function that can be set by a string or directly with a function
 */
 abstract class SettableFunction<FuncType, ArgType = Qid> {
-  public _f: undefined | ((datum: ArgType, plot: Scatterplot) => FuncType);
+  public _f:
+    | undefined
+    | ((datum: ArgType, plot: Scatterplot, ev: MouseEvent) => FuncType);
   public string_rep: string;
   public plot: Scatterplot;
   constructor(plot: Scatterplot) {
@@ -727,16 +733,20 @@ abstract class SettableFunction<FuncType, ArgType = Qid> {
     this.plot = plot;
   }
 
-  abstract default(datum: ArgType, plot: Scatterplot | undefined): FuncType;
+  abstract default(
+    datum: ArgType,
+    plot: Scatterplot | undefined,
+    ev: MouseEvent | undefined,
+  ): FuncType;
 
-  get f(): (datum: ArgType, plot: Scatterplot) => FuncType {
+  get f(): (datum: ArgType, plot: Scatterplot, ev: MouseEvent) => FuncType {
     if (this._f === undefined) {
-      return (datum, plot) => this.default(datum, plot);
+      return (datum, plot, ev) => this.default(datum, plot, ev);
     }
     return this._f;
   }
 
-  set f(f: (datum: ArgType, plot: Scatterplot) => FuncType) {
+  set f(f: (datum: ArgType, plot: Scatterplot, ev: MouseEvent) => FuncType) {
     this._f = f;
   }
 }
@@ -748,8 +758,20 @@ import type { Qid } from './tixrixqid';
 
 class ClickFunction extends SettableFunction<void, StructRowProxy> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  default(datum: StructRowProxy, plot: Scatterplot | undefined = undefined) {
-    return;
+  default(
+    datum: StructRowProxy,
+    plot: Scatterplot | undefined = undefined,
+    ev: MouseEvent | undefined = undefined,
+  ) {
+    if (ev?.ctrlKey || ev?.metaKey) {
+      const trace = datum.get('trace_uuid');
+      if (trace) {
+        window.open(
+          `https://ui.perfetto.dev/#!/?url=https://storage.googleapis.com/big-traces/${trace}.perfetto-trace.gz`,
+          '_blank',
+        );
+      }
+    }
   }
 }
 
@@ -758,7 +780,12 @@ class ChangeToHighlitPointFunction extends SettableFunction<
   Qid[]
 > {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  default(points: Qid[], plot: Scatterplot | undefined = undefined) {
+  default(
+    points: Qid[],
+    plot: Scatterplot | undefined = undefined,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ev: MouseEvent | undefined = undefined,
+  ) {
     return;
   }
 }
@@ -769,7 +796,12 @@ class ChangeToHighlitPointFunction extends SettableFunction<
 
 class TooltipHTML extends SettableFunction<string, StructRowProxy> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  default(row: StructRowProxy, plot: Scatterplot | undefined = undefined) {
+  default(
+    row: StructRowProxy,
+    plot: Scatterplot | undefined = undefined,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ev: MouseEvent | undefined = undefined,
+  ) {
     // By default, this returns a
     let output = '<dl>';
     const nope: Set<string | null | number | symbol> = new Set([
