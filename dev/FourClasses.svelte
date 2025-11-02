@@ -6,6 +6,7 @@
   import SizeSlider from './svelte/SizeSlider.svelte';
   import PositionScales from './svelte/PositionScales.svelte';
   import SelectPoints from './svelte/SelectPoints.svelte';
+  import Details from './svelte/Details.svelte';
   const startSize = 2;
   const prefs = {
     source_url: '/tiles',
@@ -39,6 +40,7 @@
   });
 </script>
 
+  <Details {scatterplot}></Details>
 <div id="overlay">
   <SwitchPositions {scatterplot}></SwitchPositions>
   <ColorChange {scatterplot}></ColorChange>

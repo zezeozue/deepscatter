@@ -17,16 +17,21 @@
     Everyone,
   };
 
-  $: mode = '';
+  let mode = '';
   onMount(() => {
-    mode = window.location.pathname.slice(1);
+    const path = window.location.pathname.slice(1);
+    if (path === '' || path === 'refactored') {
+      window.location.pathname = '/dev/refactored/index.html';
+    } else {
+      mode = path;
+    }
   });
 </script>
 
 {#if mode in modes}
   <svelte:component this={modes[mode]} />
 {:else}
-  Current mode, {mode} is not in the list of modes.
+  {@html `Current mode, ${mode} is not in the list of modes.`}
   <h1>Put a load mode from the list in the hash.</h1>
   <div>
     {#each Object.keys(modes) as modename}

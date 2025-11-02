@@ -45,15 +45,10 @@ function palette_from_color_strings(colors: readonly string[]): Uint8Array {
   });
   const output = new Uint8Array(PALETTE_SIZE * 4);
 
-  const repeat_each = Math.floor(PALETTE_SIZE / colors.length);
-  for (let i = 0; i < colors.length; i++) {
-    for (
-      let j = 0;
-      j < repeat_each && i * repeat_each + j < PALETTE_SIZE;
-      j++
-    ) {
-      output.set(scheme[i], (i * repeat_each + j) * 4);
-    }
+  // Distribute colors across the palette, ensuring the final color fills the remainder.
+  for (let i = 0; i < PALETTE_SIZE; i++) {
+    const color_index = Math.floor((i / PALETTE_SIZE) * colors.length);
+    output.set(scheme[color_index], i * 4);
   }
 
   return output;

@@ -1,0 +1,244 @@
+import { Scatterplot } from '../../src/deepscatter.ts';
+import { scaleOrdinal } from 'd3-scale';
+import { schemeTableau10 } from 'd3-scale-chromatic';
+
+const prefs = {
+  source_url: '/tiles',
+  max_points: 5000000, // Increased point count
+  alpha: 15, // Adjusted for smaller points
+  zoom_balance: 0.5, // Adjusted for smaller points
+  point_size: 2, // Smaller points
+  background_color: '#FFFFFF', // White background
+  encoding: {
+    x: { field: 'x', transform: 'literal' },
+    y: { field: 'y', transform: 'literal' },
+    color: {
+      field: 'startup_dur',
+      transform: 'log',
+      range: ['#fde725', '#21918c']
+    },
+  },
+};
+
+const scatterplot = new Scatterplot('#deepscatter');
+scatterplot.plotAPI(prefs);
+
+const detailPanel = document.getElementById('detail-panel');
+const detailContent = document.getElementById('detail-content');
+const colorColumnSelector = document.getElementById('color-column-selector');
+const legend = document.getElementById('legend');
+
+let tooltipLocked = false;
+let selectedIx = null;
+let numericColumns; // Declare in a higher scope
+
+scatterplot.ready.then(async () => {
+  const colorColumns = ['_device_name', '_build_id', 'startup_type', 'startup_dur', 'package'];
+  numericColumns = new Set(['startup_dur']); // Assign in the ready callback
+
+  for (const colName of colorColumns) {
+    const option = document.createElement('option');
+    option.value = colName;
+    option.text = colName;
+    if (colName === 'startup_dur') {
+      option.selected = true;
+    }
+    colorColumnSelector.appendChild(option);
+  }
+
+  function updateLegend(colorEncoding, globalMapping) {
+    legend.innerHTML = '';
+    if (colorEncoding.transform === 'log') {
+      // Simple gradient for numeric data
+      legend.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <div style="width: 20px; height: 20px; background: linear-gradient(to right, ${colorEncoding.range[0]}, ${colorEncoding.range[1]});"></div>
+          <span style="margin-left: 5px;">${colorEncoding.field} (log scale)</span>
+        </div>
+      `;
+    } else if (globalMapping) {
+      // Categorical legend
+      for (const [value, index] of Object.entries(globalMapping)) {
+        const color = colorEncoding.range[index % colorEncoding.range.length];
+        legend.innerHTML += `
+          <div style="display: flex; align-items: center; margin-bottom: 5px;">
+            <div style="width: 20px; height: 20px; background-color: ${color};"></div>
+            <span style="margin-left: 5px;">${value}</span>
+          </div>
+        `;
+      }
+    }
+  }
+
+  colorColumnSelector.addEventListener('change', async (event) => {
+    const newColorColumn = event.target.value;
+    const isNumeric = numericColumns.has(newColorColumn);
+
+    let colorEncoding;
+    let globalMapping = null;
+
+    if (isNumeric) {
+      colorEncoding = {
+        field: newColorColumn,
+        transform: 'log',
+        range: ['#fde725', '#21918c'],
+      };
+    } else {
+      const allValues = new Set();
+      const promises = scatterplot.deeptable.map(async (tile) => {
+        const column = await tile.get_column(newColorColumn);
+        for (const value of column) {
+          allValues.add(value);
+        }
+      });
+      await Promise.all(promises);
+
+      const uniqueValues = Array.from(allValues);
+      globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
+
+      const factorizedColumnName = `${newColorColumn}__factorized`;
+      scatterplot.deeptable.transformations[factorizedColumnName] = async (tile) => {
+        const baseColumn = await tile.get_column(newColorColumn);
+        const transformedArray = Array.from(baseColumn).map(val => globalMapping[val]);
+        return new Float32Array(transformedArray);
+      };
+
+      const loadPromises = scatterplot.deeptable.map(tile => tile.get_column(factorizedColumnName));
+      await Promise.all(loadPromises);
+
+      // Create a dynamic color scale using d3 that is guaranteed to have enough colors.
+      const colorScale = scaleOrdinal(schemeTableau10);
+      let colorRange = uniqueValues.map(d => colorScale(d));
+
+      if (uniqueValues.length === 1) {
+        // Ensure the range is always an array of at least two elements.
+        colorRange = [colorRange[0], colorRange[0]];
+      }
+
+      colorEncoding = {
+        field: factorizedColumnName,
+        transform: 'literal',
+        range: colorRange,
+      };
+    }
+    
+    scatterplot.plotAPI({
+      encoding: {
+        color: colorEncoding,
+      },
+    });
+    updateLegend(colorEncoding, globalMapping);
+  });
+
+  // Trigger initial legend render
+  colorColumnSelector.dispatchEvent(new Event('change'));
+
+  scatterplot.click_function = async (datum) => {
+    justClicked = true;
+    tooltipLocked = true;
+    selectedIx = datum.ix;
+    const trace_uuid = datum.trace_uuid;
+    detailPanel.classList.add('open');
+    let output = '';
+    const packageName = datum['package'] || '';
+    const startupDur = datum['startup_dur'] ? `${(Number(datum['startup_dur']) / 1_000_000).toFixed(2)}ms` : '';
+    
+    const header = `<div style="display: flex; justify-content: space-between; font-weight: bold;"><span>${packageName}</span><span>${startupDur}</span></div>`;
+    output += header;
+
+    const deviceName = datum['_device_name'] || '';
+    const buildId = datum['_build_id'] || '';
+    const traceUuid = datum['trace_uuid'] || '';
+    const startupType = datum['startup_type'] || '';
+
+    output += `${deviceName}\n`;
+    if (traceUuid) {
+      output += `<a href="http://go/trace-uuid/${traceUuid}" target="_blank">${traceUuid}</a>\n`;
+    }
+    output += `${buildId}\n`;
+    output += `${startupType}\n`;
+
+    detailContent.innerHTML = output;
+    const selection = await scatterplot.select_data({
+      id: [selectedIx],
+      key: 'ix',
+      name: 'clicked_point'
+    });
+    scatterplot.plotAPI({
+      encoding: {
+        size: {
+          field: selection.name,
+          range: [2, 10],
+        }
+      }
+    })
+  };
+});
+
+let mousePosition = [0, 0];
+document.addEventListener('mousemove', (event) => {
+  mousePosition = [event.clientX, event.clientY];
+});
+
+let justClicked = false;
+document.addEventListener('click', (event) => {
+  const clickedOnTooltip = false;
+  const clickedOnDetails = detailPanel.contains(event.target);
+  const clickedOnLeftPanel = document.getElementById('left-panel').contains(event.target);
+
+  if (justClicked) {
+    justClicked = false;
+    return;
+  }
+
+  if (!clickedOnTooltip && !clickedOnDetails && !clickedOnLeftPanel && selectedIx !== null) {
+    setTimeout(() => {
+      if (justClicked) return;
+      tooltipLocked = false;
+      detailPanel.classList.remove('open');
+      selectedIx = null;
+      const currentColumn = colorColumnSelector.value;
+      const isNumeric = numericColumns.has(currentColumn);
+      let colorEncoding;
+      if (isNumeric) {
+        colorEncoding = {
+          field: currentColumn,
+          transform: 'log',
+          range: ['#fde725', '#21918c']
+        };
+      } else {
+        colorEncoding = {
+          field: `${currentColumn}__factorized`,
+          transform: 'literal',
+          range: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
+        };
+      }
+      scatterplot.plotAPI({
+        encoding: {
+          // color: colorEncoding, // This was resetting the color.
+          size: { constant: 2 },
+        }
+      });
+    }, 100);
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const { zoom } = scatterplot;
+  const { transform } = zoom;
+  const panAmount = 25;
+  switch (event.key) {
+    case 'w':
+      zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);
+      break;
+    case 'a':
+      zoom.zoomer.translateBy(zoom.svg_element_selection, -panAmount, 0);
+      break;
+    case 's':
+      zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 0.8, mousePosition);
+      break;
+    case 'd':
+      zoom.zoomer.translateBy(zoom.svg_element_selection, panAmount, 0);
+      break;
+  }
+});

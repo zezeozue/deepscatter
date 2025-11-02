@@ -1,14 +1,13 @@
 import glslify from 'rollup-plugin-glslify';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
-export default (({mode}) => 
-  {
+import { defineConfig } from 'vite';
+
+export default defineConfig(({ mode }) => {
   const plugins = [
     glslify({ compress: false }), // for debugging
-  ]
-  if (mode === 'dev') {
-    plugins.push(svelte())
-  }  
+    ...svelte(),  // Always include Svelte plugin, not just in development
+  ];
 
   return {
     build: {
@@ -21,6 +20,10 @@ export default (({mode}) =>
         
       },
       rollupOptions: {
+       input: {
+         main: __dirname + '/index.html',
+         refactored: __dirname + '/dev/refactored/index.html'
+       },
         // make sure to externalize deps that shouldn't be bundled
         // into your library
         external: ['svelte', 'apache-arrow'],
@@ -36,4 +39,4 @@ export default (({mode}) =>
     },
     plugins
   }
-  })
+})
