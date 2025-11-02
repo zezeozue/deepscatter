@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(description='Convert a DuckDB table to a Parque
 parser.add_argument('db_path', type=str, help='Path to the DuckDB database file.')
 parser.add_argument('table_name', type=str, help='Name of the table to convert.')
 parser.add_argument('--where', type=str, help='An optional WHERE clause to filter the data.')
+parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
 args = parser.parse_args()
 
 # Connect to the DuckDB database
@@ -50,7 +51,8 @@ import subprocess
 print(f"Successfully converted data from table '{args.table_name}' to f1_data.parquet")
 
 # Execute the quadfeather command
-quadfeather_command = ".venv/bin/quadfeather --files f1_data.parquet --tile_size 50000 --destination tiles"
+quadfeather_command = f".venv/bin/quadfeather --files f1_data.parquet --tile_size {args.tile_size} --destination tiles"
+
 print(f"Executing command: {quadfeather_command}")
 process = subprocess.Popen(quadfeather_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 stdout, stderr = process.communicate()
