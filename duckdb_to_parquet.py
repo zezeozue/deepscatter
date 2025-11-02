@@ -8,6 +8,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Convert a DuckDB table to a Parquet file.')
 parser.add_argument('db_path', type=str, help='Path to the DuckDB database file.')
 parser.add_argument('table_name', type=str, help='Name of the table to convert.')
+parser.add_argument('--where', type=str, help='An optional WHERE clause to filter the data.')
 args = parser.parse_args()
 
 # Connect to the DuckDB database
@@ -35,9 +36,26 @@ SELECT
     CAST(FLOOR(10 * (t.startup_dur - d.min_dur) / (d.max_dur - d.min_dur)) + 1 AS INTEGER) as class
 FROM {args.table_name} t, Durations d
 """
+# Add the WHERE clause if it's provided
+if args.where:
+    query += f" WHERE {args.where}"
+
 result = con.execute(query).fetch_arrow_table()
 
 # Write the result to a Parquet file
 pq.write_table(result, 'f1_data.parquet')
 
+import subprocess
+
 print(f"Successfully converted data from table '{args.table_name}' to f1_data.parquet")
+
+# Execute the quadfeather command
+quadfeather_command = ".venv/bin/quadfeather --files f1_data.parquet --tile_size 50000 --destination tiles"
+print(f"Executing command: {quadfeather_command}")
+process = subprocess.Popen(quadfeather_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+stdout, stderr = process.communicate()
+
+if process.returncode != 0:
+    print(f"Error executing quadfeather: {stderr.decode('utf-8')}")
+else:
+    print("Quadfeather command executed successfully.")

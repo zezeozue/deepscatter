@@ -20,8 +20,10 @@ body {
 
 #left-panel {
   width: 300px;
+  min-width: 300px;
+  max-width: 300px;
   height: 100vh;
-  background-color: #ffffff;
+  background-color: #f8f9fa;
   border-right: 1px solid #e0e0e0;
   box-shadow: 1px 0 3px rgba(0,0,0,0.05);
   display: flex;
@@ -29,6 +31,7 @@ body {
   z-index: 20;
   padding: 20px;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 #header {
@@ -55,6 +58,51 @@ body {
   margin-bottom: 10px;
 }
 
+.control-section {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 10px 0;
+  padding: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-content {
+  padding: 0;
+}
+
+.section-divider {
+  height: 1px;
+  background-color: #e0e0e0;
+  margin: 20px 0;
+  border: none;
+}
+
+#filter-column-selector,
+#color-column-selector,
+#filter-value-input,
+#filter-value-selector,
+#filter-min-input,
+#filter-max-input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+/* Ensure min/max inputs in the flex container have proper sizing */
+#filter-min-input,
+#filter-max-input {
+  margin-bottom: 0;
+}
+
 #legend {
   margin-top: 10px;
 }
@@ -62,18 +110,36 @@ body {
 #detail-panel {
   width: 100%;
   height: auto;
-  padding: 10px 0;
+  padding: 0;
   background-color: transparent;
-  border-top: 1px solid #e0e0e0;
-  border-bottom: 1px solid #e0e0e0;
   font-family: 'Roboto Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
+  overflow-x: auto;
   overflow-y: auto;
+  word-wrap: break-word;
   display: none; /* Keep it hidden by default */
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 #detail-panel.open {
+  display: block;
+  margin-bottom: 5px;
+}
+
+#detail-content {
+  font-size: 11px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  margin: 0;
+  padding: 0;
+}
+
+/* Hide the detail divider when detail panel is not open */
+#detail-divider {
+  display: none;
+}
+
+#detail-panel.open + #detail-divider {
   display: block;
 }
 

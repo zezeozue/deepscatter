@@ -9,17 +9,35 @@
     <div id="deepscatter"></div>
     <div id="left-panel">
       <div id="header">
-        <h1>Deepscatter</h1>
+        <h1>App Launch Latency</h1>
       </div>
       <div id="controls">
-        <select id="color-column-selector"></select>
         <div id="detail-panel">
           <pre id="detail-content"></pre>
+        </div>
+        <div id="detail-divider" class="section-divider"></div>
+        <div class="control-section">
+          <h3 class="section-header">Filter By</h3>
+          <div class="section-content">
+            <select id="filter-column-selector"></select>
+            <div id="filter-value-container"></div>
+          </div>
+        </div>
+        <div class="section-divider"></div>
+        <div class="control-section">
+          <h3 class="section-header">Color By</h3>
+          <div class="section-content">
+            <select id="color-column-selector"></select>
+          </div>
         </div>
         <div id="legend"></div>
       </div>
     </div>
   </div>
+  <script>
+    console.log('=== BASIC SCRIPT TEST ===');
+    console.log('HTML loaded, basic JavaScript working');
+  </script>
   <script type="module" src="main.js"></script>
 </body>
 </html>
