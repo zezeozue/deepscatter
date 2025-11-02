@@ -115,11 +115,13 @@ scatterplot.ready.then(async () => {
           size: 1.0,
         },
       });
+      // Update legend after clearing filters
+      await updateColorEncoding();
       return;
     }
     
     // Create a combined selection that includes all active filters
-    const combinedSelectionName = `combined_filter_${Date.now()}`;
+    const combinedSelectionName = `combined_filter_${Date.now()}_${Math.random()}`;
     
     try {
       const selection = await scatterplot.deeptable.select_data({
@@ -203,10 +205,15 @@ scatterplot.ready.then(async () => {
         },
       });
       
+      // Update legend after filter is applied
+      console.log('Dispatching change event to update legend');
+      await updateColorEncoding();
     } catch (error) {
+      console.error('Error applying combined filters:', error);
       // Fallback: apply the most recent filter only
       const [lastColumn, lastFilter] = Array.from(activeFilters).pop();
       await applyFilterForColumn(lastColumn, lastFilter);
+      await updateColorEncoding();
     }
   }
   
@@ -500,6 +507,7 @@ scatterplot.ready.then(async () => {
   });
 
   function updateLegend(colorEncoding, globalMapping) {
+    console.log('updateLegend called with:', { colorEncoding, globalMapping });
     legend.innerHTML = '';
     if (colorEncoding.transform === 'log') {
       // Simple gradient for numeric data
@@ -509,8 +517,10 @@ scatterplot.ready.then(async () => {
           <span style="margin-left: 5px;">${colorEncoding.field} (log scale)</span>
         </div>
       `;
+      console.log('Updated legend for numeric data');
     } else if (globalMapping) {
       // Categorical legend
+      console.log(`Creating legend for ${Object.keys(globalMapping).length} categories`);
       for (const [value, index] of Object.entries(globalMapping)) {
         const color = colorEncoding.range[index % colorEncoding.range.length];
         legend.innerHTML += `
@@ -520,12 +530,17 @@ scatterplot.ready.then(async () => {
           </div>
         `;
       }
+      console.log('Updated legend for categorical data');
+    } else {
+      console.log('No legend update - no globalMapping provided');
     }
   }
 
-  colorColumnSelector.addEventListener('change', async (event) => {
-    const newColorColumn = event.target.value;
+  async function updateColorEncoding() {
+    console.log('Color column changed');
+    const newColorColumn = colorColumnSelector.value;
     const isNumeric = numericColumns.has(newColorColumn);
+    console.log(`New color column: ${newColorColumn}, isNumeric: ${isNumeric}`);
 
     let colorEncoding;
     let globalMapping = null;
@@ -538,21 +553,75 @@ scatterplot.ready.then(async () => {
       };
     } else {
       const allValues = new Set();
-      const promises = scatterplot.deeptable.map(async (tile) => {
+      const visible_tiles = scatterplot.renderer.visible_tiles();
+      console.log(`Found ${visible_tiles.length} visible tiles`);
+      
+      // Apply active filters to determine which values should be in the legend
+      const promises = visible_tiles.map(async (tile) => {
         const column = await tile.get_column(newColorColumn);
-        for (const value of column) {
-          allValues.add(value);
+        
+        // If there are active filters, only include values from rows that pass all filters
+        if (activeFilters.size > 0) {
+          console.log(`Applying ${activeFilters.size} active filters to legend data`);
+          
+          // Get all filter columns for this tile
+          const filterColumns = new Map();
+          for (const [filterColumn] of activeFilters) {
+            filterColumns.set(filterColumn, await tile.get_column(filterColumn));
+          }
+          
+          // Check each row against all active filters
+          for (let i = 0; i < tile.record_batch.numRows; i++) {
+            let passesAllFilters = true;
+            
+            // Apply each active filter
+            for (const [filterColumn, filterInfo] of activeFilters) {
+              const filterColumnData = filterColumns.get(filterColumn);
+              const isFilterNumeric = numericColumns.has(filterColumn);
+              
+              if (isFilterNumeric) {
+                const value = filterColumnData.get(i);
+                const { minValue, maxValue } = filterInfo.value;
+                
+                if (minValue !== null && !isNaN(minValue) && value <= minValue) {
+                  passesAllFilters = false;
+                  break;
+                }
+                if (maxValue !== null && !isNaN(maxValue) && value >= maxValue) {
+                  passesAllFilters = false;
+                  break;
+                }
+              } else {
+                // Categorical filter
+                if (filterColumnData.get(i) !== filterInfo.value) {
+                  passesAllFilters = false;
+                  break;
+                }
+              }
+            }
+            
+            // Only add the value if it passes all filters
+            if (passesAllFilters) {
+              allValues.add(column.get(i));
+            }
+          }
+        } else {
+          // No active filters, include all values
+          for (const value of column) {
+            allValues.add(value);
+          }
         }
       });
       await Promise.all(promises);
 
       const uniqueValues = Array.from(allValues);
+      console.log('Unique values from filtered data:', uniqueValues);
       globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
 
       const factorizedColumnName = `${newColorColumn}__factorized`;
       scatterplot.deeptable.transformations[factorizedColumnName] = async (tile) => {
         const baseColumn = await tile.get_column(newColorColumn);
-        const transformedArray = Array.from(baseColumn).map(val => globalMapping[val]);
+        const transformedArray = Array.from(baseColumn).map(val => globalMapping[val] ?? 0);
         return new Float32Array(transformedArray);
       };
 
@@ -575,12 +644,18 @@ scatterplot.ready.then(async () => {
       };
     }
     
-    scatterplot.plotAPI({
+    console.log('Updating plot with new color encoding:', colorEncoding);
+    await scatterplot.plotAPI({
       encoding: {
         color: colorEncoding,
       },
     });
+    console.log('Updating legend with mapping:', globalMapping);
     updateLegend(colorEncoding, globalMapping);
+  }
+
+  colorColumnSelector.addEventListener('change', async (event) => {
+    await updateColorEncoding();
   });
 
   // Trigger initial legend render
