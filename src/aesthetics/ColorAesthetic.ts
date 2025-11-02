@@ -91,6 +91,10 @@ for (const schemename of [
   schemes['okabe'] = okabe_palette;
 }
 
+const tableau10vega = ['#4c78a8', '#f58518', '#e45756', '#72b7b2', '#54a24b', '#eeca3b', '#b279a2', '#ff9da6', '#9d755d', '#bab0ac'];
+color_palettes['tableau10vega'] = palette_from_color_strings(tableau10vega);
+schemes['tableau10vega'] = tableau10vega;
+
 const d3Interpolators = [
   'interpolateBlues',
   'interpolateBrBG',
@@ -165,7 +169,12 @@ function getSequentialScale(
     interpolator = interpolators[range];
 
     if (interpolator === undefined) {
-      throw new Error(`Unknown interpolator ${range}`);
+      if (schemes[range] !== undefined) {
+        const [start, end] = [schemes[range][0], schemes[range].slice(-1)[0]];
+        interpolator = interpolateHsl(start, end);
+      } else {
+        throw new Error(`Unknown interpolator ${range}`);
+      }
     }
   } else {
     interpolator = interpolateHsl(...range);
@@ -202,11 +211,16 @@ export class Color<
   ) {
     super(encoding, scatterplot, map, id);
 
-    if (this.categorical) {
+    if (this.is_categorical) {
       this.populateCategoricalScale();
     } else {
       this._scale = getSequentialScale(this.range, this.transform);
-      this._scale.domain(this.domain as [number, number] | [Date, Date]);
+      const domain = this.domain;
+      if (typeof domain[0] === 'bigint') {
+        this._scale.domain(domain.map(d => Number(d)) as [number, number] | [Date, Date]);
+      } else {
+        this._scale.domain(domain as [number, number] | [Date, Date]);
+      }
     }
 
     this.encoding = encoding;
@@ -280,7 +294,11 @@ export class Color<
       return this.encoding.constant;
     }
     const scale = this.scale as ScaleOrdinal<Input['domainType'], string>;
-    return scale(v[this.field] as Input['domainType']);
+    const val = v[this.field];
+    if (typeof val === 'bigint') {
+      return scale(Number(val) as Input['domainType']);
+    }
+    return scale(val as Input['domainType']);
   }
 
   toGLType(color: string) {

@@ -17,33 +17,22 @@
       width: 100%;
       height: 100%;
     }
-    #tooltip {
-      position: absolute;
-      display: none;
-      padding: 10px;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      pointer-events: auto;
-      z-index: 10;
-    }
     #detail-panel {
       position: absolute;
       bottom: 20px;
       left: 20px;
       width: 300px;
       height: auto;
-      padding: 15px;
+      padding: 5px;
       background-color: #ffffff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       font-family: 'Roboto Mono', monospace;
-      font-size: 14px;
+      font-size: 12px;
       overflow-y: auto;
       z-index: 20;
-      display: none;
+      display: none; /* Keep it hidden by default */
     }
     #detail-panel.open {
       display: block;
@@ -66,14 +55,18 @@
 <body>
   <div id="deepscatter-container">
     <div id="deepscatter"></div>
-    <div id="tooltip"></div>
+    <div id="controls" style="position: absolute; top: 20px; left: 20px; z-index: 20; background-color: white; padding: 10px; border-radius: 5px;">
+      <select id="color-column-selector"></select>
+      <div id="legend" style="margin-top: 10px;"></div>
+    </div>
     <div id="detail-panel">
-      <h2>Details</h2>
       <pre id="detail-content"></pre>
     </div>
   </div>
   <script type="module">
     import { Scatterplot } from './src/deepscatter.ts';
+    import { scaleOrdinal } from 'd3-scale';
+    import { schemeTableau10 } from 'd3-scale-chromatic';
 
     const prefs = {
       source_url: '/tiles',
@@ -85,48 +78,153 @@
       encoding: {
         x: { field: 'x', transform: 'literal' },
         y: { field: 'y', transform: 'literal' },
-        color: { constant: '#4285F4' }, // Google Blue
+        color: {
+          field: 'startup_dur',
+          transform: 'log',
+          range: ['#fde725', '#21918c']
+        },
       },
     };
 
     const scatterplot = new Scatterplot('#deepscatter');
     scatterplot.plotAPI(prefs);
 
-    const tooltip = document.getElementById('tooltip');
     const detailPanel = document.getElementById('detail-panel');
     const detailContent = document.getElementById('detail-content');
+    const colorColumnSelector = document.getElementById('color-column-selector');
+    const legend = document.getElementById('legend');
 
     let tooltipLocked = false;
     let selectedIx = null;
+    let numericColumns; // Declare in a higher scope
 
-    scatterplot.ready.then(() => {
-      scatterplot.tooltip_html = (datum) => {
-        if (tooltipLocked) return '';
-        const trace_uuid = datum.trace_uuid;
-        if (trace_uuid) {
-          tooltip.style.display = 'block';
-          tooltip.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
-        } else {
-          tooltip.style.display = 'none';
+    scatterplot.ready.then(async () => {
+      const colorColumns = ['_device_name', '_build_id', 'startup_type', 'startup_dur', 'package'];
+      numericColumns = new Set(['startup_dur']); // Assign in the ready callback
+
+      for (const colName of colorColumns) {
+        const option = document.createElement('option');
+        option.value = colName;
+        option.text = colName;
+        if (colName === 'startup_dur') {
+          option.selected = true;
         }
-        return '';
-      };
+        colorColumnSelector.appendChild(option);
+      }
+
+      function updateLegend(colorEncoding, globalMapping) {
+        legend.innerHTML = '';
+        if (colorEncoding.transform === 'log') {
+          // Simple gradient for numeric data
+          legend.innerHTML = `
+            <div style="display: flex; align-items: center;">
+              <div style="width: 20px; height: 20px; background: linear-gradient(to right, ${colorEncoding.range[0]}, ${colorEncoding.range[1]});"></div>
+              <span style="margin-left: 5px;">${colorEncoding.field} (log scale)</span>
+            </div>
+          `;
+        } else if (globalMapping) {
+          // Categorical legend
+          for (const [value, index] of Object.entries(globalMapping)) {
+            const color = colorEncoding.range[index % colorEncoding.range.length];
+            legend.innerHTML += `
+              <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <div style="width: 20px; height: 20px; background-color: ${color};"></div>
+                <span style="margin-left: 5px;">${value}</span>
+              </div>
+            `;
+          }
+        }
+      }
+
+      colorColumnSelector.addEventListener('change', async (event) => {
+        const newColorColumn = event.target.value;
+        const isNumeric = numericColumns.has(newColorColumn);
+
+        let colorEncoding;
+        let globalMapping = null;
+
+        if (isNumeric) {
+          colorEncoding = {
+            field: newColorColumn,
+            transform: 'log',
+            range: ['#fde725', '#21918c'],
+          };
+        } else {
+          const allValues = new Set();
+          const promises = scatterplot.deeptable.map(async (tile) => {
+            const column = await tile.get_column(newColorColumn);
+            for (const value of column) {
+              allValues.add(value);
+            }
+          });
+          await Promise.all(promises);
+
+          const uniqueValues = Array.from(allValues);
+          globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
+
+          const factorizedColumnName = `${newColorColumn}__factorized`;
+          scatterplot.deeptable.transformations[factorizedColumnName] = async (tile) => {
+            const baseColumn = await tile.get_column(newColorColumn);
+            const transformedArray = Array.from(baseColumn).map(val => globalMapping[val]);
+            return new Float32Array(transformedArray);
+          };
+
+          const loadPromises = scatterplot.deeptable.map(tile => tile.get_column(factorizedColumnName));
+          await Promise.all(loadPromises);
+
+          // Create a dynamic color scale using d3 that is guaranteed to have enough colors.
+          const colorScale = scaleOrdinal(schemeTableau10);
+          let colorRange = uniqueValues.map(d => colorScale(d));
+
+          if (uniqueValues.length === 1) {
+            // Ensure the range is always an array of at least two elements.
+            colorRange = [colorRange[0], colorRange[0]];
+          }
+
+          colorEncoding = {
+            field: factorizedColumnName,
+            transform: 'literal',
+            range: colorRange,
+          };
+        }
+        
+        scatterplot.plotAPI({
+          encoding: {
+            color: colorEncoding,
+          },
+        });
+        updateLegend(colorEncoding, globalMapping);
+      });
+
+      // Trigger initial legend render
+      colorColumnSelector.dispatchEvent(new Event('change'));
 
       scatterplot.click_function = async (datum) => {
         justClicked = true;
         tooltipLocked = true;
         selectedIx = datum.ix;
         const trace_uuid = datum.trace_uuid;
-        tooltip.style.display = 'block';
-        if (trace_uuid) {
-          tooltip.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
-        }
         detailPanel.classList.add('open');
-        if (trace_uuid) {
-          detailContent.innerHTML = `<a href="http://go/trace-uuid/${trace_uuid}" target="_blank">${trace_uuid}</a>`;
-        } else {
-          detailContent.innerHTML = '';
+        let output = '';
+        const packageName = datum['package'] || '';
+        const startupDur = datum['startup_dur'] ? `${(Number(datum['startup_dur']) / 1_000_000).toFixed(2)}ms` : '';
+        
+        const header = `<div style="display: flex; justify-content: space-between; font-weight: bold;"><span>${packageName}</span><span>${startupDur}</span></div>`;
+        output += header;
+
+        const deviceName = datum['_device_name'] || '';
+        const buildId = datum['_build_id'] || '';
+        const traceUuid = datum['trace_uuid'] || '';
+        const startupType = datum['startup_type'] || '';
+
+        output += `${deviceName}\n`;
+        if (traceUuid) {
+          output += `<a href="http://go/trace-uuid/${traceUuid}" target="_blank">${traceUuid}</a>\n`;
         }
+        output += `${buildId}\n`;
+        output += `${startupType}\n`;
+
+        detailContent.innerHTML = output;
         const selection = await scatterplot.select_data({
           id: [selectedIx],
           key: 'ix',
@@ -134,10 +232,6 @@
         });
         scatterplot.plotAPI({
           encoding: {
-            color: {
-              field: selection.name,
-              range: ['#4285F4', '#0000FF'],
-            },
             size: {
               field: selection.name,
               range: [2, 10],
@@ -150,15 +244,11 @@
     let mousePosition = [0, 0];
     document.addEventListener('mousemove', (event) => {
       mousePosition = [event.clientX, event.clientY];
-      if (!tooltipLocked) {
-        tooltip.style.left = `${event.pageX + 10}px`;
-        tooltip.style.top = `${event.pageY + 10}px`;
-      }
     });
 
     let justClicked = false;
     document.addEventListener('click', (event) => {
-      const clickedOnTooltip = tooltip.contains(event.target);
+      const clickedOnTooltip = false;
       const clickedOnDetails = detailPanel.contains(event.target);
 
       if (justClicked) {
@@ -170,12 +260,27 @@
         setTimeout(() => {
           if (justClicked) return;
           tooltipLocked = false;
-          tooltip.style.display = 'none';
           detailPanel.classList.remove('open');
           selectedIx = null;
+          const currentColumn = colorColumnSelector.value;
+          const isNumeric = numericColumns.has(currentColumn);
+          let colorEncoding;
+          if (isNumeric) {
+            colorEncoding = {
+              field: currentColumn,
+              transform: 'log',
+              range: ['#fde725', '#21918c']
+            };
+          } else {
+            colorEncoding = {
+              field: `${currentColumn}__factorized`,
+              transform: 'literal',
+              range: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
+            };
+          }
           scatterplot.plotAPI({
             encoding: {
-              color: { constant: '#4285F4' },
+              // color: colorEncoding, // This was resetting the color.
               size: { constant: 2 },
             }
           });
@@ -186,7 +291,7 @@
     document.addEventListener('keydown', (event) => {
       const { zoom } = scatterplot;
       const { transform } = zoom;
-      const panAmount = 100;
+      const panAmount = 25;
       switch (event.key) {
         case 'w':
           zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);

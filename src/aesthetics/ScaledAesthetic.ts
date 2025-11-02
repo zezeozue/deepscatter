@@ -39,6 +39,7 @@ export abstract class ScaledAesthetic<
   public default_transform: DS.Transform = 'linear';
   abstract default_range: [Output['rangeType'], Output['rangeType']];
   protected categorical; // Whether this is built on a dictionary variable.
+  protected is_categorical;
 
   constructor(
     encoding: ChannelType | null,
@@ -48,6 +49,9 @@ export abstract class ScaledAesthetic<
   ) {
     super(encoding, scatterplot, aesthetic_map, id);
     this.categorical = this.is_dictionary();
+    this.is_categorical =
+      (this.encoding && this.encoding['type'] === 'categorical') ||
+      this.is_dictionary();
   }
 
   protected categoricalRange(): Output['rangeType'][] {
@@ -110,6 +114,9 @@ export abstract class ScaledAesthetic<
 
     if (typeof min === 'number' && typeof max === 'number') {
       return (this._webGLDomain = [min, max]);
+    }
+    if (typeof min === 'bigint' && typeof max === 'bigint') {
+      return (this._webGLDomain = [Number(min), Number(max)]);
     }
     throw new Error('Unable to generate appropriate GL Domain');
   }

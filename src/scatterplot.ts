@@ -582,17 +582,11 @@ export class Scatterplot {
   }
 
   set tooltip_html(func: (d: StructRowProxy, plot: Scatterplot | undefined ) => string) {
-    const deeptable = this.deeptable;
-    this.tooltip_handler.f = function(e, plot) {
-     return func(deeptable.getQids([e], ['trace_uuid'])[0], plot);
-    }
+    this.tooltip_handler.f = func
   }
 
-  set click_function(func: (d: StructRowProxy, plot: Scatterplot | undefined ) => void) {
-    const deeptable = this.deeptable;
-    this.click_handler.f = function(e, plot) {
-      func(deeptable.getQids([e], ['trace_uuid'])[0], plot);
-    }
+  set click_function(func: (d: StructRowProxy, plot: Scatterplot) => void) {
+    this.click_handler.f = func;
   }
 
   set label_click(
@@ -899,9 +893,9 @@ class LabelClick extends SettableFunction<void, GeoJsonProperties> {
   }
 }
 
-class ClickFunction extends SettableFunction<void, Qid> {
+class ClickFunction extends SettableFunction<void, StructRowProxy> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  default(datum: Qid, plot: Scatterplot | undefined = undefined) {
+  default(datum: StructRowProxy, plot: Scatterplot | undefined = undefined) {
     return;
   }
 }
@@ -920,9 +914,9 @@ class ChangeToHighlitPointFunction extends SettableFunction<
  * A holder for a function that returns the HTML that should appear in a tooltip next to a point.
  */
 
-class TooltipHTML extends SettableFunction<string, Qid> {
+class TooltipHTML extends SettableFunction<string, StructRowProxy> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  default(point: Qid, plot: Scatterplot | undefined = undefined) {
+  default(row: StructRowProxy, plot: Scatterplot | undefined = undefined) {
     // By default, this returns a
     let output = '<dl>';
     const nope: Set<string | null | number | symbol> = new Set([
@@ -932,7 +926,6 @@ class TooltipHTML extends SettableFunction<string, Qid> {
       null,
       'tile_key',
     ]);
-    const row = this.plot.deeptable.getQids([point])[0];
     for (const [k, v] of row) {
       // Don't show missing data.
       if (v === null) {

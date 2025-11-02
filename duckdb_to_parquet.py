@@ -16,18 +16,24 @@ con = duckdb.connect(database=db_path, read_only=True)
 
 # Query the table
 query = f"""
+WITH Durations AS (
+    SELECT
+        min(startup_dur) as min_dur,
+        max(startup_dur) as max_dur
+    FROM {args.table_name}
+)
 SELECT
-    x,
-    y,
-    cluster_id as class,
-    trace_uuid,
-    _device_name,
-    _build_id,
-    startup_type,
-    startup_dur,
-    package,
-    NTILE(10) OVER (ORDER BY startup_dur) as startup_speed
-FROM {args.table_name}
+    t.x,
+    t.y,
+    t.cluster_id as og_cluster,
+    t.trace_uuid,
+    t._device_name,
+    t._build_id,
+    t.startup_type,
+    t.startup_dur,
+    t.package,
+    CAST(FLOOR(10 * (t.startup_dur - d.min_dur) / (d.max_dur - d.min_dur)) + 1 AS INTEGER) as class
+FROM {args.table_name} t, Durations d
 """
 result = con.execute(query).fetch_arrow_table()
 

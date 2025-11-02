@@ -98,6 +98,7 @@ export class Zoom {
     canvas.transition().duration(duration).call(zoomer.transform, t);
   }
 
+  /*
   html_annotation(points: Annotation[]) {
     const div = this.svg_element_selection.node().parentNode
       .parentNode as HTMLDivElement;
@@ -113,23 +114,22 @@ export class Zoom {
             .style('left', 0)
             .style('position', 'absolute')
             .style('z-index', 100)
-            .style('border-radius', '8px')
-            .style('padding', '10px')
             .style('background', 'ivory'),
         (update) =>
           update.html((d) =>
-            this.scatterplot.tooltip_handler.f(d.qid, this.scatterplot),
+            this.scatterplot.tooltip_handler.f(d.data, this.scatterplot),
           ),
         (exit) => exit.call((e) => e.remove()),
       );
 
     els
-      .html((d) => this.scatterplot.tooltip_handler.f(d.qid, this.scatterplot))
+      .html((d) => this.scatterplot.tooltip_handler.f(d.data, this.scatterplot))
       .style('transform', (d) => {
         const t = `translate(${+d.x + d.dx}px, ${+d.y + d.dy}px)`;
         return t;
       });
   }
+  */
 
   zoom_to_bbox(corners: Rectangle, duration = 4000, buffer = 1.111) {
     // Zooms to two points.
@@ -171,6 +171,11 @@ export class Zoom {
         this.transform = event.transform;
         this.restart_timer(10 * 1000);
 
+        // Update the radius of the hover circle on zoom
+        const current_size = this.scatterplot.prefs.point_size;
+        const new_radius = current_size * Math.sqrt(this.transform.k) * 0.6; // Halved the multiplier
+        this.svg_element_selection.selectAll('circle.label').attr('r', new_radius);
+
         this.scatterplot.on_zoom?.(event.transform);
         if (event.sourceEvent) {
           (event.sourceEvent as Event).stopPropagation();
@@ -189,9 +194,26 @@ export class Zoom {
     const xdim = this.scatterplot.dim('x') as PositionalAesthetic;
     const ydim = this.scatterplot.dim('y') as PositionalAesthetic;
     
-    const tiles = dd.map(([tix]) => this.scatterplot.deeptable.flatTree[tix]);
-    await Promise.all(tiles.map(t => t.get_column('trace_uuid')));
-
+    const fields = [
+      'trace_uuid',
+      '_device_name',
+      '_build_id',
+      'startup_type',
+      'startup_dur',
+      'package',
+    ];
+    // This is a little convoluted, but we need to ensure the data is loaded.
+    const qid = dd[0];
+    if (!qid) {
+      // this.html_annotation([]);
+      return;
+    }
+    const tile = this.scatterplot.deeptable.flatTree[qid[0]];
+    if (!tile) {
+      // this.html_annotation([]);
+      return;
+    }
+    await tile.require_columns(fields);
     const data = this.scatterplot.deeptable.getQids(dd);
     this.scatterplot.highlit_point_change(dd, this.scatterplot);
 
@@ -202,10 +224,10 @@ export class Zoom {
         data: d,
         dx: 0,
         dy: 30,
-        qid: dd[i]
+        qid: dd[i],
       };
     });
-    this.html_annotation(annotations);
+    // this.html_annotation(annotations);
 
     const sel = this.svg_element_selection.select('#mousepoints');
     sel
@@ -218,20 +240,24 @@ export class Zoom {
             .attr('id', 'tooltipcircle')
             .attr('class', 'label')
             .attr('stroke', '#110022')
-            .attr('r', 12)
-            .attr('fill', (d) => this.scatterplot.dim('color').apply(d.data))
+            .attr('r', () => {
+              const current_size = this.scatterplot.prefs.point_size;
+              const k = this.transform ? this.transform.k : 1;
+              return current_size * Math.sqrt(k) * 0.6; // Halved the multiplier
+            })
+            .attr('fill', '#888888') // Fixed grey color
             .attr('cx', (d) => x_(xdim.apply(d.data)))
             .attr('cy', (d) => y_(ydim.apply(d.data))),
 
         (update) =>
-          update.attr('fill', (d) => this.scatterplot.dim('color').apply(d.data)),
+          update, // Do not change fill on update
         (exit) =>
           exit.call((e) => {
             e.remove();
           }),
       )
       .on('click', (ev, dd) => {
-        this.scatterplot.click_handler.f(dd.qid, this.scatterplot);
+        this.scatterplot.click_handler.f(dd.data, this.scatterplot);
       });
   }
 
