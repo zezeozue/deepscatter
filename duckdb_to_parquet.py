@@ -30,8 +30,8 @@ SELECT
     t.trace_uuid,
     t._device_name,
     t._build_id,
-    t.startup_type,
-    t.startup_dur,
+    t.startup_type AS event_type,
+    t.startup_dur AS dur,
     t.package,
     CAST(FLOOR(10 * (t.startup_dur - d.min_dur) / (d.max_dur - d.min_dur)) + 1 AS INTEGER) as class
 FROM {args.table_name} t, Durations d

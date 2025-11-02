@@ -230,8 +230,8 @@ export class Zoom {
       'trace_uuid',
       '_device_name',
       '_build_id',
-      'startup_type',
-      'startup_dur',
+      'event_type',
+      'dur',
       'package',
     ];
     // This is a little convoluted, but we need to ensure the data is loaded.

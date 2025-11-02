@@ -13,7 +13,7 @@ const prefs = {
     x: { field: 'x', transform: 'literal' },
     y: { field: 'y', transform: 'literal' },
     color: {
-      field: 'startup_dur',
+      field: 'dur',
       transform: 'log',
       range: ['#fde725', '#21918c']
     },
@@ -38,14 +38,14 @@ let numericColumns; // Declare in a higher scope
 let activeFilters = new Map(); // Track active filters: column -> {type, value, displayText}
 
 scatterplot.ready.then(async () => {
-  const allColumns = ['_device_name', '_build_id', 'startup_type', 'startup_dur', 'package'];
-  numericColumns = new Set(['startup_dur']); // Assign in the ready callback
+  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package'];
+  numericColumns = new Set(['dur']); // Assign in the ready callback
 
   for (const colName of allColumns) {
     const colorOption = document.createElement('option');
     colorOption.value = colName;
     colorOption.text = colName;
-    if (colName === 'startup_dur') {
+    if (colName === 'dur') {
       colorOption.selected = true;
     }
     colorColumnSelector.appendChild(colorOption);
@@ -607,7 +607,7 @@ scatterplot.ready.then(async () => {
     detailPanel.classList.add('open');
     let output = '';
     const packageName = datum['package'] || '';
-    const startupDur = datum['startup_dur'] ? `${(Number(datum['startup_dur']) / 1_000_000).toFixed(2)}ms` : '';
+    const startupDur = datum['dur'] ? `${(Number(datum['dur']) / 1_000_000).toFixed(2)}ms` : '';
     
     // Put startup duration on its own line at the top
     output += `<div style="font-weight: bold; margin-bottom: 4px;">${startupDur}</div>`;
@@ -616,7 +616,7 @@ scatterplot.ready.then(async () => {
     const deviceName = datum['_device_name'] || '';
     const buildId = datum['_build_id'] || '';
     const traceUuid = datum['trace_uuid'] || '';
-    const startupType = datum['startup_type'] || '';
+    const startupType = datum['event_type'] || '';
 
     output += `${deviceName}\n`;
     if (traceUuid) {
