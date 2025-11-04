@@ -6,12 +6,20 @@
 </head>
 <body>
   <div id="deepscatter-container">
-    <div id="deepscatter"></div>
+    <div id="deepscatter">
+      <div id="selection-rectangle"></div>
+    </div>
     <div id="left-panel">
       <div id="header">
         <h1>App Launch Latency</h1>
       </div>
       <div id="controls">
+        <div class="control-section">
+          <h3 class="section-header">Actions</h3>
+          <div class="section-content">
+            <button id="action-tool-button" class="action-button">Select Region</button>
+          </div>
+        </div>
         <div id="detail-panel">
           <pre id="detail-content"></pre>
         </div>
@@ -38,6 +46,23 @@
   <div id="bottom-panel">
     <div id="bottom-panel-content"></div>
   </div>
+
+  <div id="action-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Region Actions</h2>
+      <p><span id="selection-count"></span> points selected.</p>
+      <div id="action-buttons">
+        <button id="open-traces-button">Open Traces</button>
+        <div class="chart-action">
+          <select id="chart-column-selector"></select>
+          <button id="generate-chart-button">Generate Chart</button>
+        </div>
+      </div>
+      <div id="chart-container"></div>
+    </div>
+  </div>
+
   <script type="module" src="main.js"></script>
 </body>
 </html>

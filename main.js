@@ -38,8 +38,198 @@ let tooltipLocked = false;
 let selectedIx = null;
 let numericColumns; // Declare in a higher scope
 let activeFilters = new Map(); // Track active filters: column -> {type, value, displayText}
+let selectionModeActive = false;
 
 scatterplot.ready.then(async () => {
+  const actionToolButton = document.getElementById('action-tool-button');
+  const deepscatterDiv = document.getElementById('deepscatter');
+  const selectionRectangle = document.getElementById('selection-rectangle');
+  let isDrawing = false;
+  let startX, startY, endX, endY;
+
+  actionToolButton.addEventListener('click', () => {
+    selectionModeActive = !selectionModeActive;
+    actionToolButton.classList.toggle('active', selectionModeActive);
+    deepscatterDiv.style.cursor = selectionModeActive ? 'crosshair' : 'default';
+  });
+
+  deepscatterDiv.addEventListener('mousedown', (e) => {
+    if (!selectionModeActive) return;
+    e.stopPropagation();
+    isDrawing = true;
+    startX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
+    startY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
+    selectionRectangle.style.left = `${startX}px`;
+    selectionRectangle.style.top = `${startY}px`;
+    selectionRectangle.style.width = '0px';
+    selectionRectangle.style.height = '0px';
+    selectionRectangle.style.display = 'block';
+  }, true);
+
+  deepscatterDiv.addEventListener('mousemove', (e) => {
+    if (!isDrawing) return;
+    e.stopPropagation();
+    endX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
+    endY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+    const left = Math.min(startX, endX);
+    const top = Math.min(startY, endY);
+    selectionRectangle.style.width = `${width}px`;
+    selectionRectangle.style.height = `${height}px`;
+    selectionRectangle.style.left = `${left}px`;
+    selectionRectangle.style.top = `${top}px`;
+  }, true);
+
+  deepscatterDiv.addEventListener('mouseup', async (e) => {
+    if (!isDrawing) return;
+    e.stopPropagation();
+    isDrawing = false;
+    selectionRectangle.style.display = 'none';
+    endX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
+    endY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
+    
+    const { x_, y_ } = scatterplot.zoom.scales();
+    const xMin = Math.min(startX, endX);
+    const xMax = Math.max(startX, endX);
+    const yMin = Math.min(startY, endY);
+    const yMax = Math.max(startY, endY);
+
+    const xDomainMin = x_.invert(xMin);
+    const xDomainMax = x_.invert(xMax);
+    const yDomainMin = y_.invert(yMin);
+    const yDomainMax = y_.invert(yMax);
+
+    const selection = await scatterplot.deeptable.select_data({
+      name: `selection_${Date.now()}`,
+      x: [xDomainMin, xDomainMax],
+      y: [yDomainMin, yDomainMax],
+    });
+
+    const qids = await selection.get_qids();
+    const data = scatterplot.deeptable.getQids(qids);
+    
+    const modal = document.getElementById('action-modal');
+    const closeButton = document.querySelector('.close-button');
+    const selectionCount = document.getElementById('selection-count');
+    const openTracesButton = document.getElementById('open-traces-button');
+    const chartColumnSelector = document.getElementById('chart-column-selector');
+
+    selectionCount.textContent = data.length;
+
+    // Populate chart column selector
+    chartColumnSelector.innerHTML = '';
+    for (const colName of allColumns) {
+      const option = document.createElement('option');
+      option.value = colName;
+      option.text = colName;
+      chartColumnSelector.appendChild(option);
+    }
+
+    modal.style.display = 'block';
+
+    closeButton.onclick = () => {
+      modal.style.display = 'none';
+    }
+
+    window.onclick = (event) => {
+      if (event.target == modal) {
+        modal.style.display = 'none';
+      }
+    }
+
+    openTracesButton.onclick = () => {
+      for (const datum of data) {
+        const trace = datum['trace_uuid'];
+        if (trace) {
+          window.open(
+            `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`,
+            '_blank',
+          );
+        }
+      }
+    };
+
+    const generateChartButton = document.getElementById('generate-chart-button');
+    const chartContainer = document.getElementById('chart-container');
+
+    generateChartButton.onclick = () => {
+      const column = chartColumnSelector.value;
+      const isNumeric = numericColumns.has(column);
+      const values = data.map(d => d[column]);
+
+      chartContainer.innerHTML = '';
+
+      if (isNumeric) {
+        // Histogram for numeric data
+        const numBins = 20;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const binSize = (max - min) / numBins;
+        const bins = new Array(numBins).fill(0);
+
+        for (const value of values) {
+          const binIndex = Math.min(Math.floor((value - min) / binSize), numBins - 1);
+          bins[binIndex]++;
+        }
+
+        const maxBinCount = Math.max(...bins);
+        const chart = document.createElement('div');
+        chart.style.display = 'flex';
+        chart.style.alignItems = 'flex-end';
+        chart.style.gap = '2px';
+        chart.style.height = '150px';
+        chart.style.borderBottom = '1px solid #ccc';
+
+        for (const count of bins) {
+          const bar = document.createElement('div');
+          bar.style.width = `${100 / numBins}%`;
+          bar.style.height = `${(count / maxBinCount) * 100}%`;
+          bar.style.backgroundColor = '#2196f3';
+          chart.appendChild(bar);
+        }
+        chartContainer.appendChild(chart);
+      } else {
+        // Bar chart for categorical data
+        const counts = values.reduce((acc, value) => {
+          acc[value] = (acc[value] || 0) + 1;
+          return acc;
+        }, {});
+
+        const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        const maxCount = sortedCounts[0][1];
+
+        for (const [value, count] of sortedCounts) {
+          const barContainer = document.createElement('div');
+          barContainer.style.display = 'flex';
+          barContainer.style.alignItems = 'center';
+          barContainer.style.marginBottom = '5px';
+
+          const label = document.createElement('div');
+          label.textContent = value;
+          label.style.width = '100px';
+          label.style.overflow = 'hidden';
+          label.style.textOverflow = 'ellipsis';
+          label.style.whiteSpace = 'nowrap';
+
+          const bar = document.createElement('div');
+          bar.style.width = `${(count / maxCount) * (chartContainer.clientWidth - 120)}px`;
+          bar.style.height = '20px';
+          bar.style.backgroundColor = '#2196f3';
+          
+          const countLabel = document.createElement('div');
+          countLabel.textContent = count;
+          countLabel.style.marginLeft = '5px';
+
+          barContainer.appendChild(label);
+          barContainer.appendChild(bar);
+          barContainer.appendChild(countLabel);
+          chartContainer.appendChild(barContainer);
+        }
+      }
+    };
+  });
+
   const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg', 'cluster_id'];
   numericColumns = new Set(['dur']); // Assign in the ready callback
 
