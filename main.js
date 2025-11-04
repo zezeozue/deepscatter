@@ -43,70 +43,182 @@ let selectionModeActive = false;
 scatterplot.ready.then(async () => {
   const actionToolButton = document.getElementById('action-tool-button');
   const deepscatterDiv = document.getElementById('deepscatter');
-  const selectionRectangle = document.getElementById('selection-rectangle');
+  
+  // CRITICAL: Get the actual SVG element that deepscatter uses for interaction
+  const svg = document.querySelector('#deepscatter svg#deepscatter-svg');
+  
+  // Create selection rectangle as a sibling to the SVG
+  const selectionRectangle = document.createElement('div');
+  selectionRectangle.id = 'selection-rectangle';
+  selectionRectangle.style.cssText = `
+    position: absolute;
+    border: 2px dashed #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    display: none;
+    z-index: 999;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+  `;
+  svg.parentElement.appendChild(selectionRectangle);
+  
   let isDrawing = false;
   let startX, startY, endX, endY;
 
   actionToolButton.addEventListener('click', () => {
     selectionModeActive = !selectionModeActive;
     actionToolButton.classList.toggle('active', selectionModeActive);
-    deepscatterDiv.style.cursor = selectionModeActive ? 'crosshair' : 'default';
+    svg.style.cursor = selectionModeActive ? 'crosshair' : 'default';
   });
 
-  deepscatterDiv.addEventListener('mousedown', (e) => {
-    if (!selectionModeActive) return;
-    e.stopPropagation();
-    isDrawing = true;
-    startX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
-    startY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
-    selectionRectangle.style.left = `${startX}px`;
-    selectionRectangle.style.top = `${startY}px`;
-    selectionRectangle.style.width = '0px';
-    selectionRectangle.style.height = '0px';
-    selectionRectangle.style.display = 'block';
-  }, true);
 
-  deepscatterDiv.addEventListener('mousemove', (e) => {
-    if (!isDrawing) return;
-    e.stopPropagation();
-    endX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
-    endY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
-    const width = Math.abs(endX - startX);
-    const height = Math.abs(endY - startY);
-    const left = Math.min(startX, endX);
-    const top = Math.min(startY, endY);
-    selectionRectangle.style.width = `${width}px`;
-    selectionRectangle.style.height = `${height}px`;
-    selectionRectangle.style.left = `${left}px`;
-    selectionRectangle.style.top = `${top}px`;
-  }, true);
 
-  deepscatterDiv.addEventListener('mouseup', async (e) => {
-    if (!isDrawing) return;
-    e.stopPropagation();
-    isDrawing = false;
-    selectionRectangle.style.display = 'none';
-    endX = e.clientX - deepscatterDiv.getBoundingClientRect().left;
-    endY = e.clientY - deepscatterDiv.getBoundingClientRect().top;
+svg.addEventListener('mousedown', (e) => {
+  if (!selectionModeActive) return;
+  e.stopPropagation();
+  isDrawing = true;
+  
+  // Use SVG coordinates, not canvas coordinates
+  const svgRect = svg.getBoundingClientRect();
+  
+  startX = e.clientX - svgRect.left;
+  startY = e.clientY - svgRect.top;
+  
+  
+  selectionRectangle.style.display = 'block';
+}, true);
+
+// Add mousemove event for drawing selection rectangle
+svg.addEventListener('mousemove', (e) => {
+  if (!isDrawing) return;
+  
+  const svgRect = svg.getBoundingClientRect();
+  
+  endX = e.clientX - svgRect.left;
+  endY = e.clientY - svgRect.top;
+  
+  const width = Math.abs(endX - startX);
+  const height = Math.abs(endY - startY);
+  
+  const parentRect = svg.parentElement.getBoundingClientRect();
+  const left = Math.min(startX, endX) + (svgRect.left - parentRect.left);
+  const top = Math.min(startY, endY) + (svgRect.top - parentRect.top);
+  
+  selectionRectangle.style.width = `${width}px`;
+  selectionRectangle.style.height = `${height}px`;
+  selectionRectangle.style.left = `${left}px`;
+  selectionRectangle.style.top = `${top}px`;
+}, true);
+
+svg.addEventListener('mouseup', async (e) => {
+  if (!isDrawing) return;
+  e.stopPropagation();
+  isDrawing = false;
+  selectionRectangle.style.display = 'none';
+  
+  const svgRect = svg.getBoundingClientRect();
+  
+  endX = e.clientX - svgRect.left;
+  endY = e.clientY - svgRect.top;
+  
+  // Calculate selection bounds in data coordinates
+  const { x_, y_ } = scatterplot.zoom.scales();
+        
+  const xDomainMin = Math.min(x_.invert(startX), x_.invert(endX));
+  const xDomainMax = Math.max(x_.invert(startX), x_.invert(endX));
+  const startYData = y_.invert(startY);
+  const endYData = y_.invert(endY);
+  const yDomainMin = Math.min(startYData, endYData);
+  const yDomainMax = Math.max(startYData, endYData);
+
+  // Get all loaded tiles for processing
+  const allTiles = scatterplot.deeptable.map(tile => tile);
+  
+  // First, ensure all tiles have x and y columns loaded
+  const loadPromises = allTiles.map(async (tile) => {
+    try {
+      await tile.get_column('x');
+      await tile.get_column('y');
+    } catch (error) {
+      console.warn(`Failed to load columns for tile ${tile.key}:`, error);
+    }
+  });
+  
+  await Promise.all(loadPromises);
     
-    const { x_, y_ } = scatterplot.zoom.scales();
-    const xMin = Math.min(startX, endX);
-    const xMax = Math.max(startX, endX);
-    const yMin = Math.min(startY, endY);
-    const yMax = Math.max(startY, endY);
-
-    const xDomainMin = x_.invert(xMin);
-    const xDomainMax = x_.invert(xMax);
-    const yDomainMin = y_.invert(yMin);
-    const yDomainMax = y_.invert(yMax);
-
-    const selection = await scatterplot.deeptable.select_data({
-      name: `selection_${Date.now()}`,
-      x: [xDomainMin, xDomainMax],
-      y: [yDomainMin, yDomainMax],
-    });
+  const selection = await scatterplot.deeptable.select_data({
+    name: `selection_${Date.now()}`,
+    tileFunction: async (tile) => {
+      const xCol = await tile.get_column('x');
+      const yCol = await tile.get_column('y');
+      const { Vector, makeData, Bool } = await import('apache-arrow');
+      
+      // Initialize boolean array with all bits set to 0
+      const numRows = tile.record_batch.numRows;
+      const boolArray = new Uint8Array(Math.ceil(numRows / 8));
+      let matches = 0;
+      
+      // Check if this tile overlaps with selection bounds
+      let tileOverlaps = true;
+      if (tile.extent) {
+        tileOverlaps = !(
+          tile.extent.x[1] < xDomainMin || tile.extent.x[0] > xDomainMax ||
+          tile.extent.y[1] < yDomainMin || tile.extent.y[0] > yDomainMax
+        );
+      }
+      
+      if (!tileOverlaps) {
+        // Return empty selection for non-overlapping tiles
+        return new Vector([makeData({ type: new Bool(), data: boolArray, length: numRows })]);
+      }
+      
+      for (let i = 0; i < numRows; i++) {
+        const xVal = xCol.get(i);
+        const yVal = yCol.get(i);
+        const inX = xVal >= xDomainMin && xVal <= xDomainMax;
+        const inY = yVal >= yDomainMin && yVal <= yDomainMax;
+        
+        if (inX && inY) {
+          const byteIndex = Math.floor(i / 8);
+          const bitIndex = i % 8;
+          boolArray[byteIndex] |= (1 << bitIndex);
+          matches++;
+        }
+      }
+      return new Vector([makeData({ type: new Bool(), data: boolArray, length: numRows })]);
+    }
+  });
+    // Apply the selection to all loaded tiles, not just the root tile
+    await selection.applyToAllLoadedTiles();
 
     const qids = await selection.get_qids();
+    
+    // Ensure all required columns are loaded for the selected tiles
+    const requiredColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg', 'cluster_id', 'trace_uuid'];
+    const tilesToLoad = new Set();
+    
+    // Identify which tiles contain selected points
+    for (const [tix, rix] of qids) {
+      const tile = scatterplot.deeptable.flatTree[tix];
+      if (tile) {
+        tilesToLoad.add(tile);
+      }
+    }
+    
+    // Load all required columns for tiles that have selected points
+    const columnLoadPromises = [];
+    for (const tile of tilesToLoad) {
+      for (const column of requiredColumns) {
+        columnLoadPromises.push(
+          tile.get_column(column).catch(() => {
+            // Some columns might not exist, that's okay
+          })
+        );
+      }
+    }
+    
+    await Promise.all(columnLoadPromises);
+    
     const data = scatterplot.deeptable.getQids(qids);
     
     const modal = document.getElementById('action-modal');
@@ -128,25 +240,101 @@ scatterplot.ready.then(async () => {
 
     modal.style.display = 'block';
 
-    closeButton.onclick = () => {
+    const resetModal = () => {
       modal.style.display = 'none';
-    }
+      // Reset chart container
+      chartContainer.innerHTML = '';
+      // Reset column selector to default
+      chartColumnSelector.selectedIndex = 0;
+    };
+
+    closeButton.onclick = resetModal;
 
     window.onclick = (event) => {
       if (event.target == modal) {
-        modal.style.display = 'none';
+        resetModal();
       }
     }
 
     openTracesButton.onclick = () => {
-      for (const datum of data) {
-        const trace = datum['trace_uuid'];
-        if (trace) {
+      const traces = data.filter(d => d['trace_uuid']).map(d => d['trace_uuid']);
+      
+      if (traces.length === 0) {
+        alert('No traces found in selection');
+        return;
+      }
+      
+      if (traces.length === 1) {
+        // Single trace - open directly
+        window.open(
+          `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${traces[0]}&query=`,
+          '_blank'
+        );
+        return;
+      }
+      
+      // Multiple traces - create a confirmation dialog with options
+      const message = `Found ${traces.length} traces. How would you like to open them?`;
+      const options = [
+        'Open first trace only',
+        'Open all traces (may be blocked by browser)',
+        'Copy all trace URLs to clipboard',
+        'Cancel'
+      ];
+      
+      const choice = prompt(
+        message + '\n\n' +
+        options.map((opt, i) => `${i + 1}. ${opt}`).join('\n') +
+        '\n\nEnter your choice (1-4):'
+      );
+      
+      const choiceNum = parseInt(choice);
+      
+      switch (choiceNum) {
+        case 1:
+          // Open first trace only
           window.open(
-            `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`,
-            '_blank',
+            `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${traces[0]}&query=`,
+            '_blank'
           );
-        }
+          break;
+          
+        case 2:
+          // Try to open all traces (will likely be blocked)
+          traces.forEach((trace, index) => {
+            setTimeout(() => {
+              window.open(
+                `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`,
+                '_blank'
+              );
+            }, index * 200); // 200ms delay between each
+          });
+          break;
+          
+        case 3:
+          // Copy URLs to clipboard
+          const urls = traces.map(trace =>
+            `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`
+          ).join('\n');
+          
+          navigator.clipboard.writeText(urls).then(() => {
+            alert(`Copied ${traces.length} trace URLs to clipboard. You can paste them into new tabs.`);
+          }).catch(() => {
+            // Fallback for older browsers
+            const textarea = document.createElement('textarea');
+            textarea.value = urls;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            alert(`Copied ${traces.length} trace URLs to clipboard. You can paste them into new tabs.`);
+          });
+          break;
+          
+        case 4:
+        default:
+          // Cancel - do nothing
+          break;
       }
     };
 
@@ -162,18 +350,50 @@ scatterplot.ready.then(async () => {
 
       if (isNumeric) {
         // Histogram for numeric data
+        // Filter out undefined, null, and non-numeric values, handle BigInt
+        const numericValues = values.filter(v => {
+          if (v === undefined || v === null) return false;
+          if (typeof v === 'bigint') return true;
+          if (typeof v === 'number') return !isNaN(v) && isFinite(v);
+          // Try to convert string to number
+          const num = Number(v);
+          return !isNaN(num) && isFinite(num);
+        }).map(v => {
+          // Convert BigInt to number for calculations
+          if (typeof v === 'bigint') return Number(v);
+          if (typeof v === 'number') return v;
+          return Number(v);
+        });
+        
+        if (numericValues.length === 0) {
+          chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No valid numeric data found</div>';
+          return;
+        }
+        
         const numBins = 20;
-        const min = Math.min(...values);
-        const max = Math.max(...values);
+        const min = Math.min(...numericValues);
+        const max = Math.max(...numericValues);
+        
+        if (min === max) {
+          chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">All values are the same</div>';
+          return;
+        }
+        
         const binSize = (max - min) / numBins;
         const bins = new Array(numBins).fill(0);
 
-        for (const value of values) {
+        for (const value of numericValues) {
           const binIndex = Math.min(Math.floor((value - min) / binSize), numBins - 1);
           bins[binIndex]++;
         }
 
         const maxBinCount = Math.max(...bins);
+        
+        if (maxBinCount === 0) {
+          chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No data to display</div>';
+          return;
+        }
+        
         const chart = document.createElement('div');
         chart.style.display = 'flex';
         chart.style.alignItems = 'flex-end';
@@ -181,14 +401,27 @@ scatterplot.ready.then(async () => {
         chart.style.height = '150px';
         chart.style.borderBottom = '1px solid #ccc';
 
-        for (const count of bins) {
+        for (let i = 0; i < bins.length; i++) {
+          const count = bins[i];
           const bar = document.createElement('div');
           bar.style.width = `${100 / numBins}%`;
-          bar.style.height = `${(count / maxBinCount) * 100}%`;
+          bar.style.height = `${maxBinCount > 0 ? (count / maxBinCount) * 100 : 0}%`;
           bar.style.backgroundColor = '#2196f3';
+          bar.style.minHeight = count > 0 ? '2px' : '0px'; // Ensure visible bars for non-zero counts
+          bar.title = `${count} items`; // Add tooltip
           chart.appendChild(bar);
         }
         chartContainer.appendChild(chart);
+        
+        // Add labels showing the range
+        const labelsDiv = document.createElement('div');
+        labelsDiv.style.display = 'flex';
+        labelsDiv.style.justifyContent = 'space-between';
+        labelsDiv.style.fontSize = '12px';
+        labelsDiv.style.color = '#666';
+        labelsDiv.style.marginTop = '5px';
+        labelsDiv.innerHTML = `<span>Min: ${min.toFixed(2)}</span><span>Max: ${max.toFixed(2)}</span><span>Count: ${numericValues.length}</span>`;
+        chartContainer.appendChild(labelsDiv);
       } else {
         // Bar chart for categorical data
         const counts = values.reduce((acc, value) => {

@@ -20,12 +20,14 @@ body {
 }
 
 #selection-rectangle {
-  position: absolute;
+  position: absolute; /* Relative to #deepscatter */
   border: 2px dashed #007bff;
   background-color: rgba(0, 123, 255, 0.1);
   display: none;
   z-index: 999;
   pointer-events: none;
+  top: 0;
+  left: 0;
 }
 
 #left-panel {

@@ -82,9 +82,10 @@ export class Zoom {
         return;
       }
       const renderer = this.renderers.get('regl') as ReglRenderer;
+      const corners = this.current_corners();
       // Conservative settings: 1 tile at a time, low priority, longer throttle
       deeptable.spawnDownloads(
-        this.current_corners(),
+        corners,
         renderer.props.max_ix,
         5,
         renderer.aes.neededFields.map((x) => x[0]),
@@ -451,6 +452,7 @@ export class Zoom {
       x_: this.transform.rescaleX(x),
       y_: this.transform.rescaleY(y),
     };
+
     this._scales = scales;
     return scales;
   }

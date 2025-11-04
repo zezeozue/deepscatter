@@ -27,7 +27,7 @@ export interface IdSelectParams extends SelectParams {
 }
 
 function isIdSelectParam(params: unknown): params is IdSelectParams {
-  return params && params['ids'] !== undefined;
+  return params && (params as IdSelectParams).ids !== undefined;
 }
 
 export interface BooleanColumnParams extends SelectParams {
@@ -909,6 +909,19 @@ if (indexMatch === -1) {
         }
       }
     }
+  }
+
+  async get_qids(): Promise<[number, number][]> {
+    const qids: [number, number][] = [];
+    for (const { tile } of this.tiles) {
+      const column = (await tile.get_column(this.name)) as Vector<Bool>;
+      for (let i = 0; i < column.length; i++) {
+        if (column.get(i)) {
+          qids.push([tile.tix, i]);
+        }
+      }
+    }
+    return qids;
   }
 
   async add_identifier_column(
