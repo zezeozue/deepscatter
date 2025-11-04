@@ -25,6 +25,8 @@ scatterplot.plotAPI(prefs);
 
 const detailPanel = document.getElementById('detail-panel');
 const detailContent = document.getElementById('detail-content');
+const bottomPanel = document.getElementById('bottom-panel');
+const bottomPanelContent = document.getElementById('bottom-panel-content');
 const colorColumnSelector = document.getElementById('color-column-selector');
 const legend = document.getElementById('legend');
 const filterContainer = document.getElementById('filter-container');
@@ -38,7 +40,7 @@ let numericColumns; // Declare in a higher scope
 let activeFilters = new Map(); // Track active filters: column -> {type, value, displayText}
 
 scatterplot.ready.then(async () => {
-  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package'];
+  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg'];
   numericColumns = new Set(['dur']); // Assign in the ready callback
 
   for (const colName of allColumns) {
@@ -696,6 +698,7 @@ scatterplot.ready.then(async () => {
     selectedIx = datum.ix;
     const trace_uuid = datum.trace_uuid;
     detailPanel.classList.add('open');
+    bottomPanel.classList.add('open');
     let output = '';
     const packageName = datum['package'] || '';
     const startupDur = datum['dur'] ? `${(Number(datum['dur']) / 1_000_000).toFixed(2)}ms` : '';
@@ -717,6 +720,14 @@ scatterplot.ready.then(async () => {
     output += `${startupType}\n`;
 
     detailContent.innerHTML = output;
+
+    let bottomOutput = '';
+    if (datum.svg) {
+      bottomOutput = `<div class="svg-container">${datum.svg}</div>`;
+    } else {
+      bottomOutput = '<div>No Image</div>';
+    }
+    bottomPanelContent.innerHTML = bottomOutput;
     const selection = await scatterplot.select_data({
       id: [selectedIx],
       key: 'ix',
@@ -754,6 +765,7 @@ document.addEventListener('click', (event) => {
       if (justClicked) return;
       tooltipLocked = false;
       detailPanel.classList.remove('open');
+      bottomPanel.classList.remove('open');
       selectedIx = null;
       const currentColumn = colorColumnSelector.value;
       const isNumeric = numericColumns.has(currentColumn);

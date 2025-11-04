@@ -206,3 +206,36 @@ body {
 #detail-content a:hover {
   text-decoration: underline;
 }
+
+#bottom-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 300px;
+  height: 150px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -1px 3px rgba(0,0,0,0.05);
+  z-index: 10;
+  display: none;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#bottom-panel.open {
+  display: block;
+}
+
+#bottom-panel-content {
+  display: flex;
+  gap: 20px;
+}
+
+#bottom-panel-content .svg-container {
+  flex-shrink: 0;
+}
+
+#bottom-panel-content .details {
+  flex-grow: 1;
+}
