@@ -489,7 +489,14 @@ scatterplot.ready.then(async () => {
         console.error('Error fetching unique values for filter:', error);
       }
   
-      const uniqueValues = Array.from(allValues).sort(); // Sort for better UX
+      const uniqueValues = Array.from(allValues).sort((a, b) => {
+        if (filterColumn === 'cluster_id') {
+          const numA = parseInt(a.split('#')[1], 10);
+          const numB = parseInt(b.split('#')[1], 10);
+          return numA - numB;
+        }
+        return a.localeCompare(b);
+      });
       for (const val of uniqueValues) {
         const option = document.createElement('option');
         option.value = val;
@@ -635,7 +642,14 @@ scatterplot.ready.then(async () => {
       });
       await Promise.all(promises);
 
-      const uniqueValues = Array.from(allValues);
+      const uniqueValues = Array.from(allValues).sort((a, b) => {
+        if (newColorColumn === 'cluster_id') {
+          const numA = parseInt(a.split('#')[1], 10);
+          const numB = parseInt(b.split('#')[1], 10);
+          return numA - numB;
+        }
+        return a.localeCompare(b);
+      });
       globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
 
       const factorizedColumnName = `${newColorColumn}__factorized`;
