@@ -40,7 +40,7 @@ let numericColumns; // Declare in a higher scope
 let activeFilters = new Map(); // Track active filters: column -> {type, value, displayText}
 
 scatterplot.ready.then(async () => {
-  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg'];
+  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg', 'cluster_id'];
   numericColumns = new Set(['dur']); // Assign in the ready callback
 
   for (const colName of allColumns) {
@@ -655,6 +655,9 @@ scatterplot.ready.then(async () => {
       if (uniqueValues.length === 1) {
         // Ensure the range is always an array of at least two elements.
         colorRange = [colorRange[0], colorRange[0]];
+      } else if (uniqueValues.length === 0) {
+        // If there are no values, use a default color to avoid crashing.
+        colorRange = ['#888888', '#888888'];
       }
 
       colorEncoding = {
@@ -698,7 +701,6 @@ scatterplot.ready.then(async () => {
     selectedIx = datum.ix;
     const trace_uuid = datum.trace_uuid;
     detailPanel.classList.add('open');
-    bottomPanel.classList.add('open');
     let output = '';
     const packageName = datum['package'] || '';
     const startupDur = datum['dur'] ? `${(Number(datum['dur']) / 1_000_000).toFixed(2)}ms` : '';
@@ -711,6 +713,7 @@ scatterplot.ready.then(async () => {
     const buildId = datum['_build_id'] || '';
     const traceUuid = datum['trace_uuid'] || '';
     const startupType = datum['event_type'] || '';
+    const clusterId = datum['cluster_id'] || '';
 
     output += `${deviceName}\n`;
     if (traceUuid) {
@@ -718,16 +721,18 @@ scatterplot.ready.then(async () => {
     }
     output += `${buildId}\n`;
     output += `${startupType}\n`;
+    if (clusterId) {
+      output += `Cluster ID: ${clusterId}\n`;
+    }
 
     detailContent.innerHTML = output;
 
-    let bottomOutput = '';
     if (datum.svg) {
-      bottomOutput = `<div class="svg-container">${datum.svg}</div>`;
+      bottomPanel.classList.add('open');
+      bottomPanelContent.innerHTML = `<div class="svg-container">${datum.svg}</div>`;
     } else {
-      bottomOutput = '<div>No Image</div>';
+      bottomPanel.classList.remove('open');
     }
-    bottomPanelContent.innerHTML = bottomOutput;
     const selection = await scatterplot.select_data({
       id: [selectedIx],
       key: 'ix',

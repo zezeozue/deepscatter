@@ -16,6 +16,7 @@ args = parser.parse_args()
 # Connect to the DuckDB database
 db_path = os.path.expanduser(args.db_path)
 con = duckdb.connect(database=db_path, read_only=True)
+con.execute("SET arrow_large_buffer_size=true")
 
 # Query the table
 query = f"""
@@ -28,7 +29,7 @@ WITH Durations AS (
 SELECT
     t.x,
     t.y,
-    t.cluster_id as og_cluster,
+    'cluster #' || CAST(t.cluster_id AS VARCHAR) as cluster_id,
     t.trace_uuid,
     t._device_name,
     t._build_id,

@@ -239,6 +239,7 @@ export class Zoom {
       'event_type',
       'dur',
       'package',
+      'cluster_id',
     ];
     // This is a little convoluted, but we need to ensure the data is loaded.
     const qid = dd[0];
