@@ -1,4 +1,5 @@
 import { Scatterplot } from './src/deepscatter.ts';
+import { config } from './config.js';
 import { scaleOrdinal } from 'd3-scale';
 import { schemeTableau10 } from 'd3-scale-chromatic';
 
@@ -213,7 +214,7 @@ svg.addEventListener('mouseup', async (e) => {
     const qids = await selection.get_qids();
     
     // Ensure all required columns are loaded for the selected tiles
-    const requiredColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg', 'cluster_id', 'trace_uuid'];
+    const requiredColumns = config.columns.filter(c => c.required).map(c => c.name);
     const tilesToLoad = new Set();
     
     // Identify which tiles contain selected points
@@ -569,8 +570,8 @@ svg.addEventListener('mouseup', async (e) => {
     };
   });
 
-  const allColumns = ['_device_name', '_build_id', 'event_type', 'dur', 'package', 'svg', 'cluster_id'];
-  numericColumns = new Set(['dur']); // Assign in the ready callback
+  const allColumns = config.columns.filter(c => c.display !== false).map(c => c.name);
+  numericColumns = new Set(config.columns.filter(c => c.numeric).map(c => c.name)); // Assign in the ready callback
 
   for (const colName of allColumns) {
     const colorOption = document.createElement('option');
