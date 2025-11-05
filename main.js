@@ -616,6 +616,10 @@ svg.addEventListener('mouseup', async (e) => {
   async function removeFilter(column) {
     activeFilters.delete(column);
     updateFilterChips();
+
+    if (filterColumnSelector.value === column) {
+      updateFilterValueInput();
+    }
     
     // If no filters remain, reset all filters
     if (activeFilters.size === 0) {
@@ -633,6 +637,7 @@ svg.addEventListener('mouseup', async (e) => {
       // Reapply remaining filters
       await applyAllFilters();
     }
+    await updateColorEncoding();
   }
   
   async function applyAllFilters() {
