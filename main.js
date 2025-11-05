@@ -4,9 +4,9 @@ import { schemeTableau10 } from 'd3-scale-chromatic';
 
 const prefs = {
   source_url: '/tiles',
-  max_points: 5000000, // Increased point count
+  max_points: 2000000, // Reduced for better performance with 10k tiles
   alpha: 15, // Adjusted for smaller points
-  zoom_balance: 0.5, // Adjusted for smaller points
+  zoom_balance: 0.3, // Reduced for better performance
   point_size: 2, // Smaller points
   background_color: '#FFFFFF', // White background
   encoding: {
@@ -131,8 +131,9 @@ svg.addEventListener('mouseup', async (e) => {
   const yDomainMin = Math.min(startYData, endYData);
   const yDomainMax = Math.max(startYData, endYData);
 
-  // Get all loaded tiles for processing
-  const allTiles = scatterplot.deeptable.map(tile => tile);
+  // Get only visible tiles for better performance with large datasets
+  const allTiles = scatterplot.renderer.visible_tiles();
+  console.log(`Processing ${allTiles.length} visible tiles for selection`);
   
   // First, ensure all tiles have x and y columns loaded
   const loadPromises = allTiles.map(async (tile) => {
@@ -988,7 +989,9 @@ svg.addEventListener('mouseup', async (e) => {
       
       const allValues = new Set();
       try {
-        const promises = scatterplot.deeptable.map(async (tile) => {
+        // Use only visible tiles for better performance
+        const visibleTiles = scatterplot.renderer.visible_tiles();
+        const promises = visibleTiles.map(async (tile) => {
           const column = await tile.get_column(filterColumn);
           for (const value of column) {
             allValues.add(value);
@@ -1095,6 +1098,7 @@ svg.addEventListener('mouseup', async (e) => {
     } else {
       const allValues = new Set();
       const visible_tiles = scatterplot.renderer.visible_tiles();
+      console.log(`Processing ${visible_tiles.length} visible tiles for color encoding`);
       
       // Apply active filters to determine which values should be in the legend
       const promises = visible_tiles.map(async (tile) => {
@@ -1251,11 +1255,22 @@ svg.addEventListener('mouseup', async (e) => {
 
     detailContent.innerHTML = output;
 
-    if (datum.svg) {
+    // Check if SVG data exists and is valid
+    const hasSvg = datum.svg && datum.svg.trim() && datum.svg.includes('<svg');
+    console.log('SVG check:', {
+      exists: !!datum.svg,
+      hasContent: datum.svg ? datum.svg.trim().length > 0 : false,
+      isSvg: datum.svg ? datum.svg.includes('<svg') : false,
+      preview: datum.svg ? datum.svg.substring(0, 100) + '...' : 'No data'
+    });
+    
+    if (hasSvg) {
       bottomPanel.classList.add('open');
       bottomPanelContent.innerHTML = `<div class="svg-container">${datum.svg}</div>`;
+      console.log('Bottom panel opened with SVG');
     } else {
       bottomPanel.classList.remove('open');
+      console.log('No valid SVG data for this point - this is normal for points without trace visualizations');
     }
     const selection = await scatterplot.select_data({
       id: [selectedIx],

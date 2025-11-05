@@ -32,3 +32,4 @@ assets
 atlas.sh
 tmp.csv
 newtiles
+f1_data.parquet
