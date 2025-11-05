@@ -64,6 +64,7 @@ scatterplot.ready.then(async () => {
   
   let isDrawing = false;
   let startX, startY, endX, endY;
+  let hasDragged = false;
 
   actionToolButton.addEventListener('click', () => {
     selectionModeActive = !selectionModeActive;
@@ -77,6 +78,7 @@ svg.addEventListener('mousedown', (e) => {
   if (!selectionModeActive) return;
   e.stopPropagation();
   isDrawing = true;
+  hasDragged = false;
   
   // Use SVG coordinates, not canvas coordinates
   const svgRect = svg.getBoundingClientRect();
@@ -84,8 +86,7 @@ svg.addEventListener('mousedown', (e) => {
   startX = e.clientX - svgRect.left;
   startY = e.clientY - svgRect.top;
   
-  
-  selectionRectangle.style.display = 'block';
+  // Don't show selection rectangle immediately - wait for drag
 }, true);
 
 // Add mousemove event for drawing selection rectangle
@@ -97,17 +98,29 @@ svg.addEventListener('mousemove', (e) => {
   endX = e.clientX - svgRect.left;
   endY = e.clientY - svgRect.top;
   
-  const width = Math.abs(endX - startX);
-  const height = Math.abs(endY - startY);
+  // Check if we've moved enough to consider this a drag (minimum 5 pixels)
+  const deltaX = Math.abs(endX - startX);
+  const deltaY = Math.abs(endY - startY);
+  const minDragDistance = 5;
   
-  const parentRect = svg.parentElement.getBoundingClientRect();
-  const left = Math.min(startX, endX) + (svgRect.left - parentRect.left);
-  const top = Math.min(startY, endY) + (svgRect.top - parentRect.top);
+  if (!hasDragged && (deltaX > minDragDistance || deltaY > minDragDistance)) {
+    hasDragged = true;
+    selectionRectangle.style.display = 'block';
+  }
   
-  selectionRectangle.style.width = `${width}px`;
-  selectionRectangle.style.height = `${height}px`;
-  selectionRectangle.style.left = `${left}px`;
-  selectionRectangle.style.top = `${top}px`;
+  if (hasDragged) {
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+    
+    const parentRect = svg.parentElement.getBoundingClientRect();
+    const left = Math.min(startX, endX) + (svgRect.left - parentRect.left);
+    const top = Math.min(startY, endY) + (svgRect.top - parentRect.top);
+    
+    selectionRectangle.style.width = `${width}px`;
+    selectionRectangle.style.height = `${height}px`;
+    selectionRectangle.style.left = `${left}px`;
+    selectionRectangle.style.top = `${top}px`;
+  }
 }, true);
 
 svg.addEventListener('mouseup', async (e) => {
@@ -115,6 +128,11 @@ svg.addEventListener('mouseup', async (e) => {
   e.stopPropagation();
   isDrawing = false;
   selectionRectangle.style.display = 'none';
+  
+  // Only proceed with selection if we actually dragged
+  if (!hasDragged) {
+    return;
+  }
   
   const svgRect = svg.getBoundingClientRect();
   
