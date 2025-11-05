@@ -43,6 +43,7 @@ let selectionModeActive = false;
 
 scatterplot.ready.then(async () => {
   const actionToolButton = document.getElementById('action-tool-button');
+  const clusterReportButton = document.getElementById('cluster-report-button');
   const deepscatterDiv = document.getElementById('deepscatter');
   
   // CRITICAL: Get the actual SVG element that deepscatter uses for interaction
@@ -73,7 +74,9 @@ scatterplot.ready.then(async () => {
     svg.style.cursor = selectionModeActive ? 'crosshair' : 'default';
   });
 
-
+  clusterReportButton.addEventListener('click', () => {
+    window.open('cluster_report.html', '_blank');
+  });
 
 svg.addEventListener('mousedown', (e) => {
   if (!selectionModeActive) return;

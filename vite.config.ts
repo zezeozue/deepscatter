@@ -1,15 +1,30 @@
 import glslify from 'rollup-plugin-glslify';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { defineConfig, ViteDevServer } from 'vite';
+import express from './server.mjs';
 
-import { defineConfig } from 'vite';
+import { PluginOption } from 'vite';
+
+// Custom plugin to start Express server
+const expressPlugin: PluginOption = {
+  name: 'express-plugin',
+  configureServer: async (server: ViteDevServer) => {
+    server.middlewares.use(express as any);
+  }
+};
 
 export default defineConfig(({ mode }) => {
   const plugins = [
     glslify({ compress: false }), // for debugging
     ...svelte(),  // Always include Svelte plugin, not just in development
+    expressPlugin,
   ];
 
   return {
+    server: {
+      host: true,
+      port: 3347,
+    },
     build: {
       target: 'es2019',
       minify: 'terser',

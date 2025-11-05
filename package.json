@@ -17,7 +17,7 @@
     }
   },
   "scripts": {
-    "dev": "vite --mode dev --port 3344 --host",
+    "dev": "vite",
     "check": "npm run build && npm run test",
     "format": "prettier --write src",
     "prepare": "npm run build",
@@ -61,6 +61,8 @@
     "d3-timer": "^3.0.1",
     "d3-transition": "^3.0.1",
     "d3-zoom": "^3.0.0",
+    "duckdb": "^1.4.1",
+    "express": "^5.1.0",
     "glsl-easings": "^1.0.0",
     "glsl-fast-gaussian-blur": "^1.0.2",
     "glsl-read-float": "^1.1.0",
