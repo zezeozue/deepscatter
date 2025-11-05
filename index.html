@@ -48,17 +48,26 @@
 
   <div id="action-modal" class="modal">
     <div class="modal-content">
-      <span class="close-button">&times;</span>
-      <h2>Region Actions</h2>
-      <p><span id="selection-count"></span> points selected.</p>
-      <div id="action-buttons">
-        <button id="open-traces-button">Open Traces</button>
-        <div class="chart-action">
-          <select id="chart-column-selector"></select>
-          <button id="generate-chart-button">Generate Chart</button>
+      <div class="modal-header">
+        <h2>Region Actions</h2>
+        <div class="selection-info">
+          <span id="selection-count"></span> points selected
         </div>
+        <span class="close-button">&times;</span>
       </div>
-      <div id="chart-container"></div>
+      
+      <div class="modal-body">
+        
+        <div class="chart-section">
+          <div class="chart-controls">
+            <button id="open-traces-button" class="secondary-button">Open Traces</button>
+            <select id="chart-column-selector" class="chart-select"></select>
+            <button id="generate-chart-button" class="primary-button">Generate Chart</button>
+          </div>
+        </div>
+        
+        <div id="chart-container"></div>
+      </div>
     </div>
   </div>
 

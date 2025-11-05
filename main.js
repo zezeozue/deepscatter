@@ -227,7 +227,18 @@ svg.addEventListener('mouseup', async (e) => {
     const openTracesButton = document.getElementById('open-traces-button');
     const chartColumnSelector = document.getElementById('chart-column-selector');
 
-    selectionCount.textContent = data.length;
+    // Format number with D3-style suffixes (k, M, etc.)
+    const formatNumber = (num) => {
+      if (num >= 1000000) {
+        return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+      } else if (num >= 1000) {
+        return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      } else {
+        return num.toString();
+      }
+    };
+    
+    selectionCount.textContent = formatNumber(data.length);
 
     // Populate chart column selector
     chartColumnSelector.innerHTML = '';
@@ -312,13 +323,13 @@ svg.addEventListener('mouseup', async (e) => {
           break;
           
         case 3:
-          // Copy URLs to clipboard
+          // Copy URLs to clipboard in spreadsheet-friendly format
           const urls = traces.map(trace =>
             `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${trace}&query=`
           ).join('\n');
           
           navigator.clipboard.writeText(urls).then(() => {
-            alert(`Copied ${traces.length} trace URLs to clipboard. You can paste them into new tabs.`);
+            alert(`Copied ${traces.length} trace URLs to clipboard (one per line). Ready to paste into spreadsheets.`);
           }).catch(() => {
             // Fallback for older browsers
             const textarea = document.createElement('textarea');
@@ -327,7 +338,7 @@ svg.addEventListener('mouseup', async (e) => {
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            alert(`Copied ${traces.length} trace URLs to clipboard. You can paste them into new tabs.`);
+            alert(`Copied ${traces.length} trace URLs to clipboard (one per line). Ready to paste into spreadsheets.`);
           });
           break;
           
@@ -403,25 +414,64 @@ svg.addEventListener('mouseup', async (e) => {
 
         for (let i = 0; i < bins.length; i++) {
           const count = bins[i];
+          const barContainer = document.createElement('div');
+          barContainer.style.width = `${100 / numBins}%`;
+          barContainer.style.height = '100%';
+          barContainer.style.display = 'flex';
+          barContainer.style.flexDirection = 'column';
+          barContainer.style.justifyContent = 'flex-end';
+          barContainer.style.alignItems = 'center';
+          barContainer.style.position = 'relative';
+          
           const bar = document.createElement('div');
-          bar.style.width = `${100 / numBins}%`;
+          bar.style.width = '100%';
           bar.style.height = `${maxBinCount > 0 ? (count / maxBinCount) * 100 : 0}%`;
           bar.style.backgroundColor = '#2196f3';
-          bar.style.minHeight = count > 0 ? '2px' : '0px'; // Ensure visible bars for non-zero counts
-          bar.title = `${count} items`; // Add tooltip
-          chart.appendChild(bar);
+          bar.style.minHeight = count > 0 ? '2px' : '0px';
+          bar.title = `${count} items`;
+          
+          // Add count label on top of bar (only if count > 0)
+          if (count > 0) {
+            const countLabel = document.createElement('div');
+            countLabel.textContent = formatNumber(count);
+            countLabel.style.fontSize = '10px';
+            countLabel.style.color = '#333';
+            countLabel.style.marginBottom = '2px';
+            countLabel.style.whiteSpace = 'nowrap';
+            barContainer.appendChild(countLabel);
+          }
+          
+          barContainer.appendChild(bar);
+          chart.appendChild(barContainer);
         }
         chartContainer.appendChild(chart);
         
-        // Add labels showing the range
-        const labelsDiv = document.createElement('div');
-        labelsDiv.style.display = 'flex';
-        labelsDiv.style.justifyContent = 'space-between';
-        labelsDiv.style.fontSize = '12px';
-        labelsDiv.style.color = '#666';
-        labelsDiv.style.marginTop = '5px';
-        labelsDiv.innerHTML = `<span>Min: ${min.toFixed(2)}</span><span>Max: ${max.toFixed(2)}</span><span>Count: ${numericValues.length}</span>`;
-        chartContainer.appendChild(labelsDiv);
+        // Add x-axis grid labels for duration
+        if (column === 'dur') {
+          const gridContainer = document.createElement('div');
+          gridContainer.style.display = 'flex';
+          gridContainer.style.justifyContent = 'space-between';
+          gridContainer.style.fontSize = '10px';
+          gridContainer.style.color = '#666';
+          gridContainer.style.marginTop = '5px';
+          gridContainer.style.paddingLeft = '2px';
+          gridContainer.style.paddingRight = '2px';
+          
+          // Create grid labels at key points
+          const gridPoints = [0, 0.25, 0.5, 0.75, 1];
+          gridPoints.forEach(point => {
+            const value = min + (max - min) * point;
+            const label = document.createElement('span');
+            label.style.fontSize = '9px';
+            label.style.color = '#999';
+            // Convert nanoseconds to milliseconds and format
+            const ms = (value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0);
+            label.textContent = `${ms}ms`;
+            gridContainer.appendChild(label);
+          });
+          
+          chartContainer.appendChild(gridContainer);
+        }
       } else {
         // Bar chart for categorical data
         const counts = values.reduce((acc, value) => {
@@ -432,32 +482,69 @@ svg.addEventListener('mouseup', async (e) => {
         const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
         const maxCount = sortedCounts[0][1];
 
+        // Create scrollable container for the bar chart
+        const scrollContainer = document.createElement('div');
+        scrollContainer.style.maxHeight = '300px'; // Limit height for vertical scrolling
+        scrollContainer.style.overflowY = 'auto'; // Vertical scrolling for many bars
+        scrollContainer.style.overflowX = 'auto'; // Horizontal scrolling for long bars
+        scrollContainer.style.border = '1px solid #ddd';
+        scrollContainer.style.borderRadius = '4px';
+        scrollContainer.style.padding = '10px';
+
+        // Calculate a reasonable bar width (minimum 200px, can be longer)
+        const baseBarWidth = 200;
+        const maxBarWidth = Math.max(baseBarWidth, (count) => (count / maxCount) * 400);
+
         for (const [value, count] of sortedCounts) {
           const barContainer = document.createElement('div');
           barContainer.style.display = 'flex';
           barContainer.style.alignItems = 'center';
           barContainer.style.marginBottom = '5px';
+          barContainer.style.minWidth = '350px'; // Ensure minimum width for horizontal scrolling
 
           const label = document.createElement('div');
           label.textContent = value;
-          label.style.width = '100px';
+          label.style.width = '120px';
+          label.style.minWidth = '120px'; // Wider label for better readability
           label.style.overflow = 'hidden';
           label.style.textOverflow = 'ellipsis';
           label.style.whiteSpace = 'nowrap';
+          label.style.marginRight = '10px';
+          label.style.flexShrink = '0';
+          label.title = value; // Add tooltip for full text
 
           const bar = document.createElement('div');
-          bar.style.width = `${(count / maxCount) * (chartContainer.clientWidth - 120)}px`;
+          const barWidth = Math.max(20, (count / maxCount) * baseBarWidth); // Minimum 20px, scale up to baseBarWidth
+          bar.style.width = `${barWidth}px`;
           bar.style.height = '20px';
           bar.style.backgroundColor = '#2196f3';
+          bar.style.flexShrink = '0';
+          bar.title = `${count} items`; // Add tooltip
           
           const countLabel = document.createElement('div');
           countLabel.textContent = count;
-          countLabel.style.marginLeft = '5px';
+          countLabel.style.marginLeft = '10px';
+          countLabel.style.minWidth = '40px';
+          countLabel.style.textAlign = 'right';
+          countLabel.style.flexShrink = '0';
 
           barContainer.appendChild(label);
           barContainer.appendChild(bar);
           barContainer.appendChild(countLabel);
-          chartContainer.appendChild(barContainer);
+          scrollContainer.appendChild(barContainer);
+        }
+
+        chartContainer.appendChild(scrollContainer);
+
+        // Add a note about scrolling if there are many items
+        if (sortedCounts.length > 10) {
+          const scrollNote = document.createElement('div');
+          scrollNote.style.fontSize = '12px';
+          scrollNote.style.color = '#666';
+          scrollNote.style.marginTop = '5px';
+          scrollNote.style.textAlign = 'center';
+          scrollNote.textContent = `Showing ${sortedCounts.length} categories`;
+          chartContainer.appendChild(scrollNote);
         }
       }
     };
@@ -1238,10 +1325,26 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  // Don't trigger shortcuts if user is typing in an input field
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+    return;
+  }
+  
   const { zoom } = scatterplot;
   const { transform } = zoom;
   const panAmount = 10; // Reduced from 25 to 10 for smoother movement
-  switch (event.key) {
+  
+  switch (event.key.toLowerCase()) {
+    case 'l':
+      // Toggle selection mode
+      const actionToolButton = document.getElementById('action-tool-button');
+      const svg = document.querySelector('#deepscatter svg#deepscatter-svg');
+      if (actionToolButton && svg) {
+        selectionModeActive = !selectionModeActive;
+        actionToolButton.classList.toggle('active', selectionModeActive);
+        svg.style.cursor = selectionModeActive ? 'crosshair' : 'default';
+      }
+      break;
     case 'w':
       zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 1.2, mousePosition);
       break;
@@ -1249,17 +1352,17 @@ document.addEventListener('keydown', (event) => {
       zoom.zoomer.scaleBy(zoom.svg_element_selection.transition().duration(100), 0.8, mousePosition);
       break;
     case 'a':
-    case 'ArrowLeft':
+    case 'arrowleft':
       zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), panAmount, 0);
       break;
     case 'd':
-    case 'ArrowRight':
+    case 'arrowright':
       zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), -panAmount, 0);
       break;
-    case 'ArrowUp':
+    case 'arrowup':
       zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), 0, panAmount);
       break;
-    case 'ArrowDown':
+    case 'arrowdown':
       zoom.zoomer.translateBy(zoom.svg_element_selection.transition().duration(50), 0, -panAmount);
       break;
   }
