@@ -155,6 +155,14 @@ export class ReglRenderer extends Renderer {
       lastColor.colorscheme_size,
       currentColor.colorscheme_size,
     ] as [number, number];
+
+    const replacer = (key: string, value: any) => {
+      if (typeof value === 'bigint') {
+        return Number(value);
+      }
+      return value;
+    }
+
     const props: DS.GlobalDrawProps = {
       // Copy the aesthetic as a string.
       // aes: { encoding: this.aes.encoding },
@@ -169,7 +177,7 @@ export class ReglRenderer extends Renderer {
       update_time: Date.now() - this.most_recent_restart,
       relative_time: (Date.now() - this.most_recent_restart) / prefs.duration,
       // string_index: 0,
-      prefs: JSON.parse(JSON.stringify(prefs)) as DS.APICall,
+      prefs: JSON.parse(JSON.stringify(prefs, replacer)) as DS.APICall,
       wrap_colors_after,
       background_draw_needed: [
         foreground.last.active,

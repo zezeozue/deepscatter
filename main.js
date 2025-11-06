@@ -1066,7 +1066,7 @@ svg.addEventListener('mouseup', async (e) => {
     void updateFilterValueInput();
   });
 
-  function updateLegend(colorEncoding, globalMapping) {
+  function updateLegend(colorEncoding, globalMapping, dataRange = null) {
     legend.innerHTML = '';
     if (colorEncoding.transform === 'log') {
       // Create gradient for numeric data
@@ -1081,12 +1081,17 @@ svg.addEventListener('mouseup', async (e) => {
       
       // Add labels for duration to show the range
       let rangeLabels = '';
-      if (colorEncoding.field === 'dur') {
+      if (dataRange) {
+        const formatLabel = (value) => {
+          const numValue = Number(value);
+          const ms = numValue / 1_000_000;
+          if (ms < 1000) return `${ms.toFixed(0)}ms`;
+          return `${(ms / 1000).toFixed(1)}s`;
+        }
         rangeLabels = `
           <div style="display: flex; justify-content: space-between; font-size: 10px; margin-top: 2px; color: #666;">
-            <span>~100ms</span>
-            <span>~1s</span>
-            <span>~10s+</span>
+            <span>${formatLabel(dataRange.min)}</span>
+            <span>${formatLabel(dataRange.max)}</span>
           </div>
         `;
       }
@@ -1117,13 +1122,28 @@ svg.addEventListener('mouseup', async (e) => {
 
     let colorEncoding;
     let globalMapping = null;
+    let dataRange = null;
 
     if (isNumeric) {
+      const visible_tiles = scatterplot.renderer.visible_tiles();
+      let min = Infinity;
+      let max = -Infinity;
+      const promises = visible_tiles.map(async (tile) => {
+        const column = await tile.get_column(newColorColumn);
+        for (const value of column) {
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+      });
+      await Promise.all(promises);
+      dataRange = {min: Number(min), max: Number(max)};
+
       // For duration, use a multi-color scale that better captures the dynamic range
       if (newColorColumn === 'dur') {
         colorEncoding = {
           field: newColorColumn,
           transform: 'log',
+          domain: [min, max],
           range: ['#fde725', '#a0da39', '#4ac16d', '#1fa187', '#277f8e', '#365c8d', '#46327e', '#440154'], // Extended viridis: light yellow to dark purple
         };
       } else {
@@ -1131,6 +1151,7 @@ svg.addEventListener('mouseup', async (e) => {
         colorEncoding = {
           field: newColorColumn,
           transform: 'log',
+          domain: [min, max],
           range: ['#fde725', '#21918c'],
         };
       }
@@ -1239,7 +1260,7 @@ svg.addEventListener('mouseup', async (e) => {
         color: colorEncoding,
       },
     });
-    updateLegend(colorEncoding, globalMapping);
+    updateLegend(colorEncoding, globalMapping, dataRange);
   }
 
   colorColumnSelector.addEventListener('change', async (event) => {

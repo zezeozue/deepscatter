@@ -113,10 +113,16 @@ export class StatefulAesthetic<T extends ConcreteAesthetic> {
   }
 
   update(encoding: DS.ChannelType) {
-    const stringy = JSON.stringify(encoding);
+    const replacer = (key: string, value: any) => {
+      if (typeof value === 'bigint') {
+        return Number(value);
+      }
+      return value;
+    }
+    const stringy = JSON.stringify(encoding, replacer);
     // Overwrite the last version.
     if (
-      stringy === JSON.stringify(this.current.encoding) ||
+      stringy === JSON.stringify(this.current.encoding, replacer) ||
       encoding === undefined
     ) {
       // If an undefined encoding is passed, that means
