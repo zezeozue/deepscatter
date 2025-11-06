@@ -118,12 +118,22 @@ async function renderCluster(clusterId) {
         }
         tracesToDisplay = [...fastest, ...middleSample, ...slowest].sort((a, b) => a.startup_dur - b.startup_dur);
     }
+    const durations = tracesToDisplay.map(t => t.startup_dur).sort((a, b) => a - b);
+    const p50 = durations[Math.floor(durations.length * 0.5)];
+    const p90 = durations[Math.floor(durations.length * 0.9)];
+
     tracesToDisplay.forEach(row => {
         tableHtml += '<tr>';
         config.clusterReport.columns.forEach(col => {
             let cellValue = row[col.name] || 'N/A';
             if (col.format === 'duration' && row[col.name]) {
-                cellValue = `<span class="duration">${(row[col.name] / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} ms</span>`;
+                let colorClass = 'green';
+                if (row[col.name] > p90) {
+                    colorClass = 'red';
+                } else if (row[col.name] > p50) {
+                    colorClass = 'amber';
+                }
+                cellValue = `<span class="duration ${colorClass}">${(row[col.name] / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} ms</span>`;
             } else if (col.format === 'number' && row[col.name]) {
                 cellValue = row[col.name].toLocaleString();
             } else if (col.name === 'trace_uuid') {
@@ -194,7 +204,7 @@ async function renderCluster(clusterId) {
         x: durationsMs,
         type: 'histogram',
         marker: {
-            color: 'rgba(26, 115, 232, 0.7)',
+            color: 'rgba(70, 130, 180, 0.7)', // Steel Blue with transparency
         },
     };
     const durLayout = {
@@ -229,6 +239,7 @@ async function renderCluster(clusterId) {
                 y: sliceData.durations,
                 type: 'box',
                 name: name,
+                marker: { color: 'rgba(70, 130, 180, 0.7)' }, // Steel Blue with transparency
                 boxpoints: 'outliers',  // Show outliers only
                 boxmean: false,         // Disable mean line
                 whiskerwidth: 0.5,
@@ -309,6 +320,7 @@ async function renderCluster(clusterId) {
                 y: durations,
                 type: 'box',
                 name: name,
+                marker: { color: 'rgba(70, 130, 180, 0.7)' }, // Steel Blue with transparency
                 boxpoints: 'outliers',  // Show outliers only
                 boxmean: false,         // Disable mean line
                 whiskerwidth: 0.5,
@@ -344,7 +356,10 @@ async function renderCluster(clusterId) {
         const trace = {
             x: sortedCounts.map(d => d[0]),
             y: sortedCounts.map(d => d[1]),
-            type: 'bar'
+            type: 'bar',
+            marker: {
+                color: 'rgba(70, 130, 180, 0.7)' // Steel Blue with transparency
+            }
         };
         const title = showAllUnique ?
             `Distribution of ${col.replace('_', ' ')} (All ${counts.size} unique values)` :
@@ -694,7 +709,7 @@ function updateBarChart(sizes) {
         .attr("width", x.bandwidth())
         .attr("y", d => y(d.size))
         .attr("height", d => height - y(d.size))
-        .attr("fill", "#1a73e8")
+        .attr("fill", "#4682B4")
         .style("cursor", "pointer")
         .on("click", (event, d) => {
             renderCluster(d.cluster_id);
@@ -708,5 +723,5 @@ function updateBarChart(sizes) {
         .on("mouseout", function(d) {
             tooltip.transition().duration(500).style("opacity", 0);
         })
-        .classed("selected", d => d.cluster_id === selectedClusterId);
+        .style("opacity", d => selectedClusterId === null || d.cluster_id === selectedClusterId ? 1 : 0.3);
 }

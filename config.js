@@ -1,4 +1,5 @@
 export const config = {
+  title: "App Launch Latency",
   columns: [
     { name: '_device_name', numeric: false },
     { name: '_build_id', numeric: false },

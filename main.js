@@ -42,6 +42,8 @@ let activeFilters = new Map(); // Track active filters: column -> {type, value, 
 let selectionModeActive = false;
 
 scatterplot.ready.then(async () => {
+  document.title = config.title;
+  document.querySelector('#header h1').textContent = config.title;
   const actionToolButton = document.getElementById('action-tool-button');
   const clusterReportButton = document.getElementById('cluster-report-button');
   const deepscatterDiv = document.getElementById('deepscatter');

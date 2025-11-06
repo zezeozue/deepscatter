@@ -31,7 +31,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         h1 {
-            color: #1a73e8;
+            color: #4682B4; /* Steel Blue */
             margin-bottom: 10px;
             font-size: 2em;
         }
@@ -51,7 +51,7 @@
             background: #f8f9fa;
             padding: 20px;
             border-radius: 2px;
-            border-left: 4px solid #1a73e8;
+            border-left: 4px solid #4682B4; /* Steel Blue */
         }
         .summary-card h3 {
             font-size: 0.9em;
@@ -63,7 +63,7 @@
         .summary-card .value {
             font-size: 1.6em;
             font-weight: bold;
-            color: #1a73e8;
+            color: #4682B4; /* Steel Blue */
         }
         .cluster-nav {
             margin-bottom: 30px;
@@ -88,14 +88,14 @@
             align-items: center;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #1a73e8;
+            border-bottom: 2px solid #4682B4; /* Steel Blue */
         }
         .cluster-title {
             font-size: 1.5em;
-            color: #1a73e8;
+            color: #4682B4; /* Steel Blue */
         }
         .cluster-size {
-            background: #1a73e8;
+            background: #4682B4; /* Steel Blue */
             color: white;
             padding: 5px 15px;
             border-radius: 20px;
@@ -146,7 +146,7 @@
             overflow: hidden;
         }
         .traces-table thead {
-            background: #1a73e8;
+            background: #4682B4; /* Steel Blue */
             color: white;
         }
         .traces-table th {
@@ -175,7 +175,7 @@
             background: #f5f5f5;
         }
         .trace-link {
-            color: #1a73e8;
+            color: #4682B4; /* Steel Blue */
             text-decoration: none;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 0.9em;
@@ -185,7 +185,15 @@
         }
         .duration {
             font-family: 'Monaco', 'Courier New', monospace;
+        }
+        .duration.green {
             color: #0d652d;
+        }
+        .duration.amber {
+            color: #f29900;
+        }
+        .duration.red {
+            color: #d93025;
         }
         .package {
             font-size: 0.9em;
@@ -214,7 +222,7 @@
             position: fixed;
             bottom: 30px;
             right: 30px;
-            background: #1a73e8;
+            background: #4682B4; /* Steel Blue */
             color: white;
             padding: 12px 20px;
             border-radius: 25px;
@@ -223,7 +231,7 @@
             transition: background 0.2s;
         }
         .back-to-top:hover {
-            background: #1557b0;
+            background: #5a9bdc; /* Lighter Steel Blue */
         }
         .footer {
             margin-top: 40px;
@@ -270,10 +278,10 @@
             transition: fill 0.2s;
         }
         .bar:hover {
-            fill: #1557b0;
+            fill: #5a9bdc; /* Lighter Steel Blue */
         }
         .bar.selected {
-            fill: #d93f0b; /* A distinct highlight color */
+            fill: #4682B4; /* Steel Blue */
         }
         .tooltip {
             position: absolute;
@@ -314,8 +322,22 @@
     </style>
 </head>
 <body>
+    <style>
+      .back-link {
+        font-size: 14px;
+        color: #007bff;
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .back-link:hover {
+        text-decoration: underline;
+      }
+    </style>
     <div class="container">
-        <h1>App Launch Latency report</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1>App Launch Latency report</h1>
+          <a href="index.html" class="back-link">← Back to Explore</a>
+        </div>
         <div class="header-info">
         </div>
         <div class="summary">
