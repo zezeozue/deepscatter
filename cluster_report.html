@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Startup Sequence Clustering Report</title>
+    <title>App Launch Latency report</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -27,7 +27,7 @@
             margin: 0 auto;
             background: white;
             padding: 30px;
-            border-radius: 8px;
+            border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         h1 {
@@ -50,7 +50,7 @@
         .summary-card {
             background: #f8f9fa;
             padding: 20px;
-            border-radius: 6px;
+            border-radius: 2px;
             border-left: 4px solid #1a73e8;
         }
         .summary-card h3 {
@@ -69,7 +69,7 @@
             margin-bottom: 30px;
             padding: 20px;
             background: #f8f9fa;
-            border-radius: 6px;
+            border-radius: 2px;
         }
         .cluster-nav h2 {
             margin-bottom: 15px;
@@ -79,7 +79,7 @@
             margin-bottom: 40px;
             padding: 25px;
             background: #fafafa;
-            border-radius: 6px;
+            border-radius: 2px;
             border: 1px solid #e0e0e0;
         }
         .cluster-header {
@@ -104,7 +104,7 @@
         .nav-buttons button {
             background: #f0f0f0;
             border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 2px;
             padding: 5px 10px;
             cursor: pointer;
             transition: background 0.2s;
@@ -123,7 +123,7 @@
             margin-bottom: 20px;
             padding: 15px;
             background: white;
-            border-radius: 4px;
+            border-radius: 2px;
         }
         .stat-item {
             padding: 10px;
@@ -142,7 +142,7 @@
             width: 100%;
             border-collapse: collapse;
             background: white;
-            border-radius: 4px;
+            border-radius: 2px;
             overflow: hidden;
         }
         .traces-table thead {
@@ -194,7 +194,7 @@
         .startup-type {
             display: inline-block;
             padding: 3px 8px;
-            border-radius: 3px;
+            border-radius: 2px;
             font-size: 0.85em;
             font-weight: 500;
         }
@@ -238,7 +238,7 @@
             margin-bottom: 30px;
             padding: 20px;
             background: #f8f9fa;
-            border-radius: 6px;
+            border-radius: 2px;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
@@ -252,7 +252,7 @@
             width: 100%;
             padding: 8px;
             border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 2px;
         }
         /* D3 plot styles */
         .cluster-plot-container {
@@ -284,7 +284,7 @@
             font: 12px sans-serif;
             background: lightsteelblue;
             border: 0px;
-            border-radius: 8px;
+            border-radius: 4px;
             pointer-events: none;
         }
         .cluster-plots {
@@ -315,10 +315,8 @@
 </head>
 <body>
     <div class="container">
-        <h1>Startup Sequence Clustering Report</h1>
+        <h1>App Launch Latency report</h1>
         <div class="header-info">
-            <p><strong>Generated:</strong> <span id="generation-timestamp"></span></p>
-            <p><strong>Results Directory:</strong> <span id="results-dir"></span></p>
         </div>
         <div class="summary">
             <div class="summary-card">
@@ -333,14 +331,6 @@
                 <h3>Avg Cluster Size</h3>
                 <div class="value" id="summary-avg-size"></div>
             </div>
-            <div class="summary-card">
-                <h3>Silhouette Score</h3>
-                <div class="value" id="silhouette-score"></div>
-            </div>
-            <div class="summary-card">
-                <h3>Calinski-Harabasz Score</h3>
-                <div class="value" id="calinski-score"></div>
-            </div>
         </div>
         <div class="filters">
             <div class="filter-group">
@@ -349,11 +339,11 @@
             </div>
             <div class="filter-group">
                 <label for="device-filter">Device</label>
-                <select id="device-filter" class="select2"></select>
+                <select id="_device_name-filter" class="select2"></select>
             </div>
             <div class="filter-group">
                 <label for="startup-type-filter">Startup Type</label>
-                <select id="startup-type-filter" class="select2"></select>
+                <select id="startup_type-filter" class="select2"></select>
             </div>
             <div class="filter-group">
                 <label for="min-duration-filter">Min Duration (ns)</label>
@@ -377,11 +367,8 @@
         <div id="cross-cluster-plots">
             <!-- This section will be populated by JavaScript -->
         </div>
-        <div class="footer">
-            <p>Generated by Startup Sequence Clustering Analysis</p>
-        </div>
     </div>
     <a href="#top" class="back-to-top">↑ Back to Top</a>
-    <script src="cluster_report.js"></script>
+    <script type="module" src="cluster_report.js"></script>
 </body>
 </html>

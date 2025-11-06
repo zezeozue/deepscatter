@@ -1,3 +1,5 @@
+import { config } from './config.js';
+
 // Placeholder data - this will be replaced by a fetch call to the backend
 let originalMetadata = [];
 let clusterAnalysis = [];
@@ -9,9 +11,10 @@ let maxPerCluster = 10;
 let topSlices = 10;
 let showAllUnique = false;
 
-async function fetchData() {
+async function fetchData(filters = {}) {
+  const query = new URLSearchParams(filters).toString();
   try {
-    const response = await fetch('/cluster_analysis');
+    const response = await fetch(`/cluster_analysis?${query}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -28,13 +31,9 @@ async function fetchData() {
 
     console.log("Data received from server:", data);
 
-    document.getElementById('generation-timestamp').textContent = new Date(data.timestamp).toLocaleString();
-    document.getElementById('results-dir').textContent = data.resultsDir;
     document.getElementById('summary-total-traces').textContent = data.totalTraces.toLocaleString();
     document.getElementById('summary-clusters').textContent = data.numClusters;
     document.getElementById('summary-avg-size').textContent = Math.round(data.avgClusterSize);
-    document.getElementById('silhouette-score').textContent = data.silhouette;
-    document.getElementById('calinski-score').textContent = data.calinski;
     
     return data;
   } catch (error) {
@@ -100,14 +99,7 @@ async function renderCluster(clusterId) {
         <table class="traces-table">
             <thead>
                 <tr>
-                    <th data-sort="trace_uuid">Trace UUID</th>
-                    <th data-sort="startup_dur">Startup Duration (ms)</th>
-                    <th data-sort="startup_type">Type</th>
-                    <th data-sort="num_events">Events</th>
-                    <th data-sort="package">Package</th>
-                    <th data-sort="_device_name">Device</th>
-                    <th data-sort="_build_id">Build ID</th>
-                    <th>Sequence</th>
+                ${config.clusterReport.columns.map(col => `<th ${col.sortable ? `data-sort="${col.name}"` : ''}>${col.display}</th>`).join('')}
                 </tr>
             </thead>
             <tbody>`;
@@ -127,18 +119,19 @@ async function renderCluster(clusterId) {
         tracesToDisplay = [...fastest, ...middleSample, ...slowest].sort((a, b) => a.startup_dur - b.startup_dur);
     }
     tracesToDisplay.forEach(row => {
-        const startupTypeClass = row.startup_type ? row.startup_type.toLowerCase() : '';
-        tableHtml += `
-            <tr>
-                <td><a href="https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${row.trace_uuid}&query=" class="trace-link" target="_blank">${row.trace_uuid}</a></td>
-                <td><span class="duration">${row.startup_dur ? (row.startup_dur/1e6).toLocaleString(undefined, {maximumFractionDigits: 0}) + ' ms' : 'N/A'}</span></td>
-                <td><span class="startup-type ${startupTypeClass}">${row.startup_type || 'N/A'}</span></td>
-                <td>${row.num_events ? row.num_events.toLocaleString() : 'N/A'}</td>
-                <td><span class="package">${row.package || 'N/A'}</span></td>
-                <td>${row._device_name || 'N/A'}</td>
-                <td>${row._build_id || 'N/A'}</td>
-                <td><button class="sequence-button" data-trace-uuid="${row.trace_uuid}">Show</button></td>
-            </tr>`;
+        tableHtml += '<tr>';
+        config.clusterReport.columns.forEach(col => {
+            let cellValue = row[col.name] || 'N/A';
+            if (col.format === 'duration' && row[col.name]) {
+                cellValue = `<span class="duration">${(row[col.name] / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} ms</span>`;
+            } else if (col.format === 'number' && row[col.name]) {
+                cellValue = row[col.name].toLocaleString();
+            } else if (col.name === 'trace_uuid') {
+                cellValue = `<a href="https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${row.trace_uuid}&query=" class="trace-link" target="_blank">${row.trace_uuid}</a>`;
+            }
+            tableHtml += `<td>${cellValue}</td>`;
+        });
+        tableHtml += '</tr>';
     });
     tableHtml += '</tbody></table>';
     detailView.innerHTML = `
@@ -338,7 +331,7 @@ async function renderCluster(clusterId) {
         };
         Plotly.newPlot(plotDiv, traces, layout);
     }
-    ['package', '_device_name', '_build_id', 'startup_type'].forEach(col => {
+    config.clusterReport.filterableColumns.forEach(col => {
         const plotDiv = document.createElement('div');
         plotDiv.className = 'plot-container';
         plotsContainer.appendChild(plotDiv);
@@ -355,7 +348,7 @@ async function renderCluster(clusterId) {
         };
         const title = showAllUnique ?
             `Distribution of ${col.replace('_', ' ')} (All ${counts.size} unique values)` :
-            `Distribution of ${col.replace('_', ' ')} (Top ${Math.min(topSlices, counts.size)})`;
+            `Distribution of ${col.replace('_', ' ')}`;
         Plotly.newPlot(plotDiv, [trace], {title: title});
     });
 
@@ -407,16 +400,7 @@ function sortTable(table, key) {
 }
 
 function getColumnIndex(key) {
-  const headerMap = {
-    'trace_uuid': 0,
-    'startup_dur': 1,
-    'startup_type': 2,
-    'num_events': 3,
-    'package': 4,
-    '_device_name': 5,
-    '_build_id': 6,
-  };
-  return headerMap[key];
+    return config.clusterReport.columns.findIndex(c => c.name === key);
 }
 
 let clusterSizes = {}; // Make this globally accessible within the module
@@ -441,29 +425,65 @@ function updateReport(filteredMetadata) {
         selectedClusterId = null;
     }
 }
-function applyFilters() {
-    const selectedPackage = $('#package-filter').val();
-    const selectedDevice = $('#device-filter').val();
-    const selectedStartupType = $('#startup-type-filter').val();
-    const minDuration = parseFloat(document.getElementById('min-duration-filter').value) || 0;
-    const maxDuration = parseFloat(document.getElementById('max-duration-filter').value) || Infinity;
-    currentMetadata = originalMetadata.filter(d => {
-        const packageMatch = !selectedPackage || d.package === selectedPackage;
-        const deviceMatch = !selectedDevice || d.device_name === selectedDevice;
-        const startupTypeMatch = !selectedStartupType || d.startup_type === selectedStartupType;
-        const durationMatch = (d.startup_dur >= minDuration) && (d.startup_dur <= maxDuration);
-        return packageMatch && deviceMatch && startupTypeMatch && durationMatch;
+let filterTimeout;
+async function applyFilters() {
+    // Show loading indicator
+    const plotContainer = d3.select("#cluster-plot");
+    plotContainer.append("div")
+        .attr("class", "loading-overlay")
+        .style("position", "absolute")
+        .style("top", 0)
+        .style("left", 0)
+        .style("width", "100%")
+        .style("height", "100%")
+        .style("background", "rgba(255, 255, 255, 0.7)")
+        .style("display", "flex")
+        .style("align-items", "center")
+        .style("justify-content", "center")
+        .html("<em>Loading...</em>");
+
+    const filters = {};
+    config.clusterReport.filterableColumns.forEach(colName => {
+        const selector = $(`#${colName}-filter`);
+        if (selector.length) {
+            const value = selector.val();
+            if (value) {
+                filters[colName] = value;
+            }
+        }
     });
-    updateReport(currentMetadata);
-    generateCrossClusterPlots(); // Regenerate cross-cluster plots with filtered data
+    const minDuration = parseFloat(document.getElementById('min-duration-filter').value);
+    if (!isNaN(minDuration)) {
+        filters.min_startup_dur = minDuration;
+    }
+    const maxDuration = parseFloat(document.getElementById('max-duration-filter').value);
+    if (!isNaN(maxDuration)) {
+        filters.max_startup_dur = maxDuration;
+    }
+    
+    const data = await fetchData(filters);
+    if (data) {
+        updateReport(data.metadata);
+        generateCrossClusterPlots();
+    }
+    // Remove loading indicator
+    plotContainer.select(".loading-overlay").remove();
+}
+
+function debounceApplyFilters() {
+    clearTimeout(filterTimeout);
+    filterTimeout = setTimeout(applyFilters, 300); // 300ms delay
 }
 function populateFilters() {
-    const packages = [...new Set(originalMetadata.map(d => d.package))].sort();
-    const devices = [...new Set(originalMetadata.map(d => d._device_name))].sort();
-    const startupTypes = [...new Set(originalMetadata.map(d => d.startup_type))].sort();
-    populateSelect($('#package-filter'), packages);
-    populateSelect($('#device-filter'), devices);
-    populateSelect($('#startup-type-filter'), startupTypes);
+    config.clusterReport.filterableColumns.forEach(colName => {
+        const values = [...new Set(originalMetadata.map(d => d[colName]))].sort();
+        const selector = $(`#${colName}-filter`);
+        if (selector.length) {
+            populateSelect(selector, values);
+        } else {
+            console.warn(`Filter selector for column '${colName}' not found during population.`);
+        }
+    });
     $('.select2').select2();
 }
 function populateSelect(selectElement, options) {
@@ -528,16 +548,18 @@ function generateCrossClusterPlots() {
     });
 }
 $(document).ready(async function() {
-    const data = await fetchData();
-    if (data) {
-      $('.select2').select2();
-      populateFilters();
-      updateReport(originalMetadata); // Initial draw
-      // The cross-cluster plots require a div that is not in the current HTML.
-      // generateCrossClusterPlots(); // Generate cross-cluster analysis
-      $('#package-filter, #device-filter, #startup-type-filter').on('change', applyFilters);
-      $('#min-duration-filter, #max-duration-filter').on('keyup change', applyFilters);
-    }
+    fetchData().then(data => {
+        if (data) {
+            $('.select2').select2();
+            populateFilters();
+            updateReport(originalMetadata); // Initial draw
+            // generateCrossClusterPlots(); // This can be enabled if the container is added to the HTML
+            config.clusterReport.filterableColumns.forEach(colName => {
+                $(`#${colName}-filter`).on('change', applyFilters);
+            });
+            $('#min-duration-filter, #max-duration-filter').on('keyup', debounceApplyFilters);
+        }
+    });
 });
 
 document.addEventListener('keydown', (event) => {
@@ -551,37 +573,6 @@ document.addEventListener('keydown', (event) => {
   } else if (event.key === 'ArrowRight' && !nextBtn.disabled) {
     nextBtn.click();
   }
-});
-$(document).on('click', '.sequence-button', function() {
-    const uuid = $(this).data('trace-uuid');
-    const sequenceData = sequences[uuid];
-    if (!sequenceData) {
-        alert(`Sequence data not loaded. To load it, run:\n\npython tools/duck_db.py --db {duckdb_path} "SELECT * FROM {table_name} WHERE _trace_uuid='${uuid}'"`);
-        return;
-    }
-    const tr = $(this).closest('tr');
-    // Check if this specific row's chart is already open
-    if (tr.next().hasClass('sequence-row') && tr.next().data('trace-uuid') === uuid) {
-        tr.next().remove();
-        $(this).text('Show');
-        return;
-    }
-    // If there's an existing chart row for this trace, remove it first
-    if (tr.next().hasClass('sequence-row') && tr.next().data('trace-uuid') === uuid) {
-        tr.next().remove();
-    }
-    $(this).text('Hide');
-    const durationData = Array.from(d3.rollup(sequenceData, v => d3.sum(v, d => d.dur), d => d.norm_name), ([name, value]) => ({name, value})).sort((a, b) => b.value - a.value);
-    const countData = Array.from(d3.rollup(sequenceData, v => v.length, d => d.norm_name), ([name, value]) => ({name, value})).sort((a, b) => b.value - a.value);
-    const allTokens = [...new Set(sequenceData.map(d => d.norm_name))];
-    const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(allTokens);
-    const subRow = $('<tr class="sequence-row"><td colspan="8"></td></tr>').insertAfter(tr);
-    subRow.data('trace-uuid', uuid);  // Mark which trace this row belongs to
-    const container = subRow.find('td');
-    const chartId = 'chart-' + uuid;  // Unique ID for this trace's charts
-    container.html(`<div class="sequence-chart-container"><div class="chart-wrapper" id="${chartId}-duration"></div><div class="chart-wrapper" id="${chartId}-count"></div></div>`);
-    createBarChart(`#${chartId}-duration`, durationData, 'Total Duration (ms)', colorScale, 'duration');
-    createBarChart(`#${chartId}-count`, countData, 'Event Count', colorScale, 'count');
 });
 function createBarChart(selector, data, title, colorScale, formatType) {
     const margin = {top: 30, right: 20, bottom: 40, left: 250};
@@ -641,29 +632,60 @@ function createBarChart(selector, data, title, colorScale, formatType) {
 }
 // --- D3 Visualization ---
 const plotContainer = d3.select("#cluster-plot");
-const margin = {top: 20, right: 20, bottom: 30, left: 40};
+const margin = {top: 20, right: 20, bottom: 50, left: 60};
 const width = plotContainer.node().getBoundingClientRect().width - margin.left - margin.right;
 const height = 400 - margin.top - margin.bottom;
 const svg = plotContainer.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
 
 function updateBarChart(sizes) {
     clusterSizes = sizes; // Update global variable
     svg.selectAll("*").remove();
+
     const sortedClusters = Object.entries(clusterSizes)
         .map(([id, size]) => ({cluster_id: parseInt(id), size: size}))
         .sort((a, b) => b.size - a.size);
+
     const x = d3.scaleBand()
         .range([0, width])
         .domain(sortedClusters.map(d => d.cluster_id))
         .padding(0.2);
+
     const y = d3.scaleLinear()
         .domain([0, d3.max(sortedClusters, d => d.size) || 1])
         .range([height, 0]);
+
+    const xAxis = d3.axisBottom(x);
+    if (sortedClusters.length > 20) {
+        const tickValues = x.domain().filter((d, i) => !(i % Math.floor(sortedClusters.length / 10)));
+        xAxis.tickValues(tickValues);
+    }
+
     svg.append("g")
         .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x));
+        .call(xAxis)
+        .append("text")
+        .attr("x", width / 2)
+        .attr("y", 45)
+        .attr("fill", "#000")
+        .attr("font-weight", "bold")
+        .attr("text-anchor", "middle")
+        .text("Cluster ID");
+
     svg.append("g")
-        .call(d3.axisLeft(y));
+        .call(d3.axisLeft(y))
+        .append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", -height / 2)
+        .attr("dy", "1em")
+        .attr("fill", "#000")
+        .attr("font-weight", "bold")
+        .attr("text-anchor", "middle")
+        .text("Number of Traces");
+
     svg.selectAll(".bar")
         .data(sortedClusters)
         .enter().append("rect")
@@ -676,6 +698,15 @@ function updateBarChart(sizes) {
         .style("cursor", "pointer")
         .on("click", (event, d) => {
             renderCluster(d.cluster_id);
+        })
+        .on("mouseover", function(event, d) {
+            tooltip.transition().duration(200).style("opacity", .9);
+            tooltip.html(`Cluster ID: ${d.cluster_id}<br/>Size: ${d.size.toLocaleString()}`)
+                .style("left", (event.pageX + 5) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", function(d) {
+            tooltip.transition().duration(500).style("opacity", 0);
         })
         .classed("selected", d => d.cluster_id === selectedClusterId);
 }
