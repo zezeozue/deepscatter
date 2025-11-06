@@ -282,8 +282,7 @@ export class Zoom {
             .attr('stroke', '#110022')
             .attr('r', () => {
               const current_size = this.scatterplot.prefs.point_size;
-              const k = this.transform ? this.transform.k : 1;
-              return current_size * Math.sqrt(k) * 0.6; // Halved the multiplier
+              return current_size * 3;
             })
             .attr('fill', '#888888') // Fixed grey color
             .attr('cx', (d) => x_(xdim.apply(d.data)))
