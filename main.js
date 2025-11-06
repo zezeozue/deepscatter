@@ -179,22 +179,13 @@ svg.addEventListener('mouseup', async (e) => {
       // Initialize boolean array with all bits set to 0
       const numRows = tile.record_batch.numRows;
       const boolArray = new Uint8Array(Math.ceil(numRows / 8));
-      let matches = 0;
       
-      // Check if this tile overlaps with selection bounds
-      let tileOverlaps = true;
-      if (tile.extent) {
-        tileOverlaps = !(
-          tile.extent.x[1] < xDomainMin || tile.extent.x[0] > xDomainMax ||
-          tile.extent.y[1] < yDomainMin || tile.extent.y[0] > yDomainMax
-        );
+      // Pre-load all filter columns
+      const filterColumns = new Map();
+      for (const [colName] of activeFilters) {
+        filterColumns.set(colName, await tile.get_column(colName));
       }
-      
-      if (!tileOverlaps) {
-        // Return empty selection for non-overlapping tiles
-        return new Vector([makeData({ type: new Bool(), data: boolArray, length: numRows })]);
-      }
-      
+
       for (let i = 0; i < numRows; i++) {
         const xVal = xCol.get(i);
         const yVal = yCol.get(i);
@@ -202,10 +193,29 @@ svg.addEventListener('mouseup', async (e) => {
         const inY = yVal >= yDomainMin && yVal <= yDomainMax;
         
         if (inX && inY) {
-          const byteIndex = Math.floor(i / 8);
-          const bitIndex = i % 8;
-          boolArray[byteIndex] |= (1 << bitIndex);
-          matches++;
+          let passesAllFilters = true;
+          for (const [colName, filterInfo] of activeFilters) {
+            const colData = filterColumns.get(colName);
+            const val = colData.get(i);
+            if (filterInfo.type === 'numeric') {
+              const { minValue, maxValue } = filterInfo.value;
+              if ((minValue !== null && val < minValue) || (maxValue !== null && val > maxValue)) {
+                passesAllFilters = false;
+                break;
+              }
+            } else { // Categorical
+              if (val !== filterInfo.value) {
+                passesAllFilters = false;
+                break;
+              }
+            }
+          }
+          
+          if (passesAllFilters) {
+            const byteIndex = Math.floor(i / 8);
+            const bitIndex = i % 8;
+            boolArray[byteIndex] |= (1 << bitIndex);
+          }
         }
       }
       return new Vector([makeData({ type: new Bool(), data: boolArray, length: numRows })]);
