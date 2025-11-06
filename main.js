@@ -227,7 +227,7 @@ svg.addEventListener('mouseup', async (e) => {
     const qids = await selection.get_qids();
     
     // Ensure all required columns are loaded for the selected tiles
-    const requiredColumns = config.columns.filter(c => c.required).map(c => c.name);
+    const allColumnsForCharts = config.columns.map(c => c.name);
     const tilesToLoad = new Set();
     
     // Identify which tiles contain selected points
@@ -238,13 +238,13 @@ svg.addEventListener('mouseup', async (e) => {
       }
     }
     
-    // Load all required columns for tiles that have selected points
+    // Load ALL columns for tiles that have selected points to ensure chart data is available
     const columnLoadPromises = [];
     for (const tile of tilesToLoad) {
-      for (const column of requiredColumns) {
+      for (const column of allColumnsForCharts) {
         columnLoadPromises.push(
           tile.get_column(column).catch(() => {
-            // Some columns might not exist, that's okay
+            // Some columns might not exist on some tiles, that's okay
           })
         );
       }
