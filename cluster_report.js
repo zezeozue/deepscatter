@@ -11,8 +11,12 @@ let maxPerCluster = 10;
 let topSlices = 10;
 let showAllUnique = false;
 
-async function fetchData(filters = {}) {
-  const query = new URLSearchParams(filters).toString();
+async function fetchData(filters = {}, initialLoad = false) {
+  const params = new URLSearchParams(filters);
+  if (initialLoad) {
+    params.append('initial', 'true');
+  }
+  const query = params.toString();
   try {
     const response = await fetch(`/cluster_analysis?${query}`);
     if (!response.ok) {
@@ -20,11 +24,18 @@ async function fetchData(filters = {}) {
     }
     const data = await response.json();
 
-    originalMetadata = data.metadata;
+    if (initialLoad) {
+        originalMetadata = []; // No metadata on initial load
+    } else {
+        originalMetadata = data.metadata;
+    }
     clusterAnalysis = data.clusterAnalysis;
     sequences = data.sequences;
     boxplotData = data.boxplotData;
     currentMetadata = [...originalMetadata];
+    if (data.filterOptions) {
+        window.filterOptions = data.filterOptions;
+    }
     maxPerCluster = data.maxPerCluster;
     topSlices = data.topSlices;
     showAllUnique = data.showAllUnique;
@@ -490,8 +501,16 @@ function debounceApplyFilters() {
     filterTimeout = setTimeout(applyFilters, 300); // 300ms delay
 }
 function populateFilters() {
+    const optionsSource = window.filterOptions ? window.filterOptions : originalMetadata;
+
     config.clusterReport.filterableColumns.forEach(colName => {
-        const values = [...new Set(originalMetadata.map(d => d[colName]))].sort();
+        let values;
+        if (window.filterOptions) {
+            values = optionsSource[colName] || [];
+        } else {
+            values = [...new Set(optionsSource.map(d => d[colName]))].sort();
+        }
+        
         const selector = $(`#${colName}-filter`);
         if (selector.length) {
             populateSelect(selector, values);
@@ -563,11 +582,20 @@ function generateCrossClusterPlots() {
     });
 }
 $(document).ready(async function() {
-    fetchData().then(data => {
+    fetchData({}, true).then(data => {
         if (data) {
             $('.select2').select2();
             populateFilters();
-            updateReport(originalMetadata); // Initial draw
+            // On initial load, use the aggregated data directly
+            document.getElementById('summary-total-traces').textContent = data.totalTraces.toLocaleString();
+            document.getElementById('summary-clusters').textContent = data.numClusters;
+            document.getElementById('summary-avg-size').textContent = Math.round(data.avgClusterSize);
+            const initialClusterSizes = data.clusterAnalysis.reduce((acc, d) => {
+                acc[d.cluster_id] = d.num_traces;
+                return acc;
+            }, {});
+            updateBarChart(initialClusterSizes);
+            // updateReport(originalMetadata); // This is not needed on initial load
             // generateCrossClusterPlots(); // This can be enabled if the container is added to the HTML
             config.clusterReport.filterableColumns.forEach(colName => {
                 $(`#${colName}-filter`).on('change', applyFilters);

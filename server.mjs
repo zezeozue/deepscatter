@@ -43,22 +43,93 @@ app.get('/cluster_analysis', async (req, res) => {
         whereClauses.push('startup_dur <= ?');
         queryParams.push(Number(value));
       } else {
-        whereClauses.push(`${key} = ?`);
-        queryParams.push(value);
+        if (key !== 'initial') {
+          whereClauses.push(`${key} = ?`);
+          queryParams.push(value);
+        }
       }
     }
     
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-    const query = `SELECT * FROM ${tableName} ${whereClause}`;
-    
-    console.log(`Querying table: ${tableName} with query: ${query} and params: ${queryParams}`);
-    const metadata = await dbAll(query, ...queryParams);
-    console.log(`Successfully fetched ${metadata.length} rows.`);
-    
-    // The filtering for null cluster_id is now done in the SQL query
-    const filteredMetadata = metadata.filter(row => row.cluster_id !== null && row.cluster_id !== undefined);
 
-    if (filteredMetadata.length === 0) {
+    if (req.query.initial === 'true') {
+      // --- Initial Load: Fetch aggregated data only ---
+      const aggQuery = `
+        SELECT
+          COUNT(*) as totalTraces,
+          COUNT(DISTINCT cluster_id) as numClusters,
+          AVG(startup_dur) as avg_startup_dur,
+          APPROX_QUANTILE(startup_dur, 0.5) as p50_startup_dur,
+          APPROX_QUANTILE(startup_dur, 0.9) as p90_startup_dur,
+          APPROX_QUANTILE(startup_dur, 0.99) as p99_startup_dur
+        FROM ${tableName}
+        ${whereClause}
+      `;
+      console.log(`Querying table with aggregation: ${aggQuery}`);
+      const summary = await dbAll(aggQuery, ...queryParams);
+      const clusterAnalysisQuery = `
+        SELECT
+            cluster_id,
+            COUNT(*) as num_traces,
+            AVG(startup_dur) as avg_startup_dur,
+            APPROX_QUANTILE(startup_dur, 0.5) as p50_startup_dur,
+            APPROX_QUANTILE(startup_dur, 0.9) as p90_startup_dur,
+            APPROX_QUANTILE(startup_dur, 0.99) as p99_startup_dur,
+            COUNT(DISTINCT package) as unique_packages,
+            COUNT(DISTINCT _device_name) as unique_devices,
+            COUNT(DISTINCT _build_id) as unique_build_ids
+        FROM ${tableName}
+        ${whereClause}
+        GROUP BY cluster_id
+        ORDER BY num_traces DESC
+      `;
+      console.log(`Querying cluster analysis: ${clusterAnalysisQuery}`);
+      const clusterAnalysis = await dbAll(clusterAnalysisQuery, ...queryParams);
+
+      const filterOptions = {};
+      const filterableColumns = ['package', '_device_name', '_build_id', 'startup_type']; // Add other filterable columns here
+      for (const col of filterableColumns) {
+        const distinctValuesQuery = `SELECT DISTINCT ${col} FROM ${tableName} WHERE ${col} IS NOT NULL ORDER BY ${col}`;
+        const values = await dbAll(distinctValuesQuery);
+        filterOptions[col] = values.map(v => v[col]);
+      }
+
+      const totalTraces = summary[0].totalTraces;
+      const numClusters = summary[0].numClusters;
+      const avgClusterSize = totalTraces / numClusters;
+      const convertBigInts = (obj) => {
+        for (const key in obj) {
+            if (typeof obj[key] === 'bigint') {
+            obj[key] = Number(obj[key]);
+            } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+            convertBigInts(obj[key]);
+            }
+        }
+        return obj;
+        };
+      return res.json(convertBigInts({
+        metadata: [], // No metadata on initial load
+        clusterAnalysis,
+        sequences: {},
+        boxplotData: {},
+        totalTraces,
+        numClusters,
+        avgClusterSize,
+        timestamp: new Date().toISOString(),
+        resultsDir: "from_duckdb",
+        silhouette: "N/A",
+        calinski: "N/A",
+        filterOptions
+      }));
+
+    } else {
+      // --- Full Data Load ---
+      const query = `SELECT * FROM ${tableName} ${whereClause}`;
+      console.log(`Querying table: ${tableName} with query: ${query} and params: ${queryParams}`);
+      const metadata = await dbAll(query, ...queryParams);
+      console.log(`Successfully fetched ${metadata.length} rows.`);
+      const filteredMetadata = metadata.filter(row => row.cluster_id !== null && row.cluster_id !== undefined);
+      if (filteredMetadata.length === 0) {
       return res.json({
         metadata: [], clusterAnalysis: [], sequences: {}, boxplotData: {},
         totalTraces: 0, numClusters: 0, avgClusterSize: 0,
@@ -111,7 +182,7 @@ app.get('/cluster_analysis', async (req, res) => {
     };
 
     res.json(convertBigInts({
-      metadata: filteredMetadata,
+      metadata: filteredMetadata, // Send full metadata
       clusterAnalysis,
       sequences: {}, // Placeholder
       boxplotData: {}, // Placeholder
@@ -123,8 +194,9 @@ app.get('/cluster_analysis', async (req, res) => {
       silhouette: "N/A", // Placeholder
       calinski: "N/A" // Placeholder
     }));
-
-  } catch (error) {
+    }
+  }
+ catch (error) {
     console.error('!!! Critical Error in /cluster_analysis:', error);
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
