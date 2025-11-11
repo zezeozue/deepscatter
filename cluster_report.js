@@ -106,6 +106,12 @@ async function renderCluster(clusterId) {
             </div>`;
     }
     statsHtml += '</div>';
+
+    let imageHtml = '';
+    if (clusterInfo.image_path) {
+      imageHtml = `<div class="cluster-image"><img src="${clusterInfo.image_path}" alt="Cluster ${clusterId} signature"></div>`;
+    }
+
     let tableHtml = `
         <table class="traces-table">
             <thead>
@@ -165,6 +171,7 @@ async function renderCluster(clusterId) {
                 </div>
             </div>
             ${statsHtml}
+            ${imageHtml}
             <div class="cluster-plots" id="cluster-plots-container">
                 <div id="dur-histogram-container" class="plot-container"></div>
                 <div id="package-dist-container" class="plot-container"></div>
@@ -486,6 +493,10 @@ async function applyFilters() {
     if (!isNaN(maxDuration)) {
         filters.max_startup_dur = maxDuration;
     }
+    const clusterId = parseInt(document.getElementById('cluster-id-filter').value);
+    if (!isNaN(clusterId)) {
+        filters.cluster_id = clusterId;
+    }
     
     const data = await fetchData(filters);
     if (data) {
@@ -600,7 +611,7 @@ $(document).ready(async function() {
             config.clusterReport.filterableColumns.forEach(colName => {
                 $(`#${colName}-filter`).on('change', applyFilters);
             });
-            $('#min-duration-filter, #max-duration-filter').on('keyup', debounceApplyFilters);
+            $('#min-duration-filter, #max-duration-filter, #cluster-id-filter').on('keyup', debounceApplyFilters);
         }
     });
 });

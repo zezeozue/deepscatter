@@ -319,6 +319,16 @@
         th[data-sort].sort-desc::after {
             border-top-color: #fff;
         }
+        .cluster-image {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .cluster-image img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
@@ -374,6 +384,10 @@
             <div class="filter-group">
                 <label for="max-duration-filter">Max Duration (ns)</label>
                 <input type="number" id="max-duration-filter" placeholder="e.g., 5000000000">
+            </div>
+            <div class="filter-group">
+                <label for="cluster-id-filter">Cluster ID</label>
+                <input type="number" id="cluster-id-filter" placeholder="e.g., 123">
             </div>
         </div>
         <div class="cluster-nav" id="top">

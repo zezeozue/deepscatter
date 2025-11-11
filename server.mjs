@@ -2,10 +2,12 @@ import express from 'express';
 import duckdb from 'duckdb';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
 
 // --- Environment Variable Parsing ---
 const dbPath = process.env.DB_PATH;
 const tableName = process.env.TABLE_NAME;
+const imageDir = process.env.IMAGE_DIR;
 
 if (!dbPath || !tableName) {
   console.error('Error: DB_PATH and TABLE_NAME environment variables must be set.');
@@ -14,6 +16,9 @@ if (!dbPath || !tableName) {
 } else {
   console.log(` * Server configured for database: ${dbPath}`);
   console.log(` * Table: ${tableName}`);
+  if (imageDir) {
+    console.log(` * Image directory: ${imageDir}`);
+  }
 }
 
 console.log(` * Starting server for ${dbPath} on table ${tableName}`);
@@ -85,6 +90,18 @@ app.get('/cluster_analysis', async (req, res) => {
       `;
       console.log(`Querying cluster analysis: ${clusterAnalysisQuery}`);
       const clusterAnalysis = await dbAll(clusterAnalysisQuery, ...queryParams);
+
+      if (imageDir) {
+        for (const cluster of clusterAnalysis) {
+          const imagePath = path.join(imageDir, `cluster_${cluster.cluster_id}_signature.png`);
+          try {
+            await fs.promises.access(imagePath);
+            cluster.image_path = `/images/cluster_${cluster.cluster_id}_signature.png`;
+          } catch (error) {
+            // File doesn't exist, do nothing
+          }
+        }
+      }
 
       const filterOptions = {};
       const filterableColumns = ['package', '_device_name', '_build_id', 'startup_type']; // Add other filterable columns here
@@ -165,6 +182,18 @@ app.get('/cluster_analysis', async (req, res) => {
       };
     });
 
+    if (imageDir) {
+      for (const cluster of clusterAnalysis) {
+        const imagePath = path.join(imageDir, `cluster_${cluster.cluster_id}_signature.png`);
+        try {
+          await fs.promises.access(imagePath);
+          cluster.image_path = `/images/cluster_${cluster.cluster_id}_signature.png`;
+        } catch (error) {
+          // File doesn't exist, do nothing
+        }
+      }
+    }
+
     const totalTraces = filteredMetadata.length;
     const numClusters = Object.keys(clusterGroups).length;
     const avgClusterSize = totalTraces / numClusters;
@@ -232,5 +261,9 @@ app.get('/cluster_traces/:cluster_id', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+if (imageDir) {
+  app.use('/images', express.static(imageDir));
+}
 
 export default app;
