@@ -20,10 +20,13 @@ export default defineConfig(({ mode }) => {
     expressPlugin,
   ];
 
+  // Use PORT environment variable if set (for Cloud Run), otherwise default to 3347
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3347;
+
   return {
     server: {
       host: true,
-      port: 3347,
+      port: port,
     },
     build: {
       target: 'es2019',
