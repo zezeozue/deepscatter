@@ -275,7 +275,7 @@ export class ReglRenderer extends Renderer {
       return;
     }
 
-    const { prefs, deeptable, props } = this;
+    const { props } = this;
     this.tick_num = this.tick_num || 0;
     this.tick_num++;
 

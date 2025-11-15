@@ -23,7 +23,6 @@ import {
   Int16,
   Int32,
   Int8,
-  tableToIPC,
   Struct,
 } from 'apache-arrow';
 import { Scatterplot } from './scatterplot';

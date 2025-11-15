@@ -32,12 +32,11 @@ export default defineConfig(({ mode }) => {
         entry: __dirname + '/src/deepscatter.ts',
         name: 'Deepscatter',
         formats: ['es', 'umd'],
-        
+
       },
       rollupOptions: {
        input: {
-         main: __dirname + '/index.html',
-         refactored: __dirname + '/dev/refactored/index.html'
+         main: __dirname + '/index.html'
        },
         // make sure to externalize deps that shouldn't be bundled
         // into your library

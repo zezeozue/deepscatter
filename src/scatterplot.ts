@@ -5,10 +5,8 @@ import { Zoom } from './interaction';
 import { neededFieldsToPlot, ReglRenderer } from './regl_rendering';
 import { tableFromIPC, type StructRowProxy } from 'apache-arrow';
 import { Deeptable } from './Deeptable';
-import type { FeatureCollection } from 'geojson';
 import { Renderer } from './rendering';
 import type { ConcreteAesthetic } from './aesthetics/StatefulAesthetic';
-import { isURLLabels, isLabelset } from './typing';
 import { DataSelection } from './selection';
 import type {
   BooleanColumnParams,
@@ -751,7 +749,6 @@ abstract class SettableFunction<FuncType, ArgType = Qid> {
   }
 }
 
-import type { GeoJsonProperties } from 'geojson';
 import { default_API_call } from './defaults';
 import type { Qid } from './tixrixqid';
 
