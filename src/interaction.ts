@@ -14,7 +14,7 @@ import { StructRowProxy } from 'apache-arrow';
 import { Rectangle } from './tile';
 import type { Deeptable } from './Deeptable';
 import type * as DS from './types';
-import type { Scatterplot } from './scatterplot';
+import { Scatterplot } from './scatterplot';
 import { PositionalAesthetic } from './aesthetics/ScaledAesthetic';
 import { Qid } from './tixrixqid';
 type Annotation = {
@@ -213,6 +213,11 @@ export class Zoom {
     this.zoomer = zoomer;
 
     this.svg_element_selection.on('click', (ev: MouseEvent) => {
+      // If a selection is active, don't do anything.
+      // The user will need to click outside the selection to clear it.
+      if (this.scatterplot.prefs.encoding.foreground) {
+        return;
+      }
       if (ev.ctrlKey || ev.metaKey) {
         const p = (this.renderers.get('regl') as ReglRenderer).color_pick(
           ev.offsetX,
@@ -253,7 +258,16 @@ export class Zoom {
       // this.html_annotation([]);
       return;
     }
-    await tile.require_columns(fields);
+    // Try to load fields, but don't fail if they don't exist
+    const availableFields = fields.filter(field => tile.hasLoadedColumn(field) || this.scatterplot.deeptable.transformations[field]);
+    if (availableFields.length > 0) {
+      try {
+        await tile.require_columns(availableFields);
+      } catch (error) {
+        // Some fields might not exist, that's okay
+        console.debug('Some tooltip fields not available:', error);
+      }
+    }
     const data = this.scatterplot.deeptable.getQids(dd);
     this.scatterplot.highlit_point_change(dd, this.scatterplot, undefined);
 

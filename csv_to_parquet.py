@@ -1,0 +1,67 @@
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+import argparse
+import subprocess
+import os
+
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Convert a CSV file to a Parquet file, generate a config, and create tiles.')
+parser.add_argument('csv_path', type=str, help='Path to the CSV file.')
+parser.add_argument('--x', type=str, required=True, help='The column to use for the x-axis.')
+parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
+parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
+args = parser.parse_args()
+
+# Read CSV and infer schema
+csv_path = os.path.expanduser(args.csv_path)
+df = pd.read_csv(csv_path)
+schema = pa.Schema.from_pandas(df)
+
+# Generate columns list for config.js
+config_columns = []
+for field in schema:
+    is_numeric = field.type in [pa.int64(), pa.int32(), pa.int16(), pa.int8(), pa.float64(), pa.float32(), pa.float16()]
+    config_columns.append({
+        "name": field.name,
+        "numeric": is_numeric,
+    })
+
+# Generate config.js
+config_js = f"""
+export const config = {{
+  columns: {str(config_columns).replace("True", "true").replace("False", "false")},
+}};
+"""
+with open('config.js', 'w') as f:
+    f.write(config_js)
+
+print("Generated config.js")
+
+# Rename columns for x and y
+df = df.rename(columns={args.x: 'x', args.y: 'y'})
+
+# Invert y-axis
+y_min = df['y'].min()
+y_max = df['y'].max()
+df['y'] = y_max - (df['y'] - y_min)
+
+print("Inverted y-axis")
+
+# Convert to Arrow Table and write to Parquet
+table = pa.Table.from_pandas(df)
+pq.write_table(table, 'f1_data.parquet')
+
+print(f"Successfully converted data from '{args.csv_path}' to f1_data.parquet")
+
+# Execute the quadfeather command
+quadfeather_command = f".venv/bin/quadfeather --files f1_data.parquet --tile_size {args.tile_size} --destination tiles"
+
+print(f"Executing command: {quadfeather_command}")
+process = subprocess.Popen(quadfeather_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+stdout, stderr = process.communicate()
+
+if process.returncode != 0:
+    print(f"Error executing quadfeather: {stderr.decode('utf-8')}")
+else:
+    print("Quadfeather command executed successfully.")

@@ -5,14 +5,28 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Loading overlay -->
+  <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 30px; border-radius: 8px; text-align: center; min-width: 300px;">
+      <h3 style="margin: 0 0 15px 0;">Loading Data...</h3>
+      <div style="width: 100%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden;">
+        <div id="progress-bar" style="width: 0%; height: 100%; background: #2196f3; transition: width 0.3s;"></div>
+      </div>
+      <p id="progress-text" style="margin: 10px 0 0 0; color: #666;">Parsing file...</p>
+    </div>
+  </div>
+
   <div id="deepscatter-container">
     <div id="deepscatter">
     </div>
     <div id="left-panel">
       <div id="header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <h1></h1>
-          <button id="cluster-report-button" class="report-button">Summary</button>
+          <h1>BrushScatter</h1>
+          <div style="display: flex; gap: 8px;">
+            <input type="file" id="csv-upload" accept=".csv,.tsv,.json" style="display: none;">
+            <button id="import-csv-button" class="report-button" title="Import Data (CSV/TSV/JSON)">+</button>
+          </div>
         </div>
       </div>
       <div id="controls">
@@ -49,31 +63,60 @@
     <div id="bottom-panel-content"></div>
   </div>
 
-  <div id="action-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
+  <div id="action-panel" class="bottom-nav-panel">
+    <div class="panel-resize-handle"></div>
+    <div class="panel-header">
+      <div class="panel-header-left">
         <h2>Region Actions</h2>
         <div class="selection-info">
           <span id="selection-count"></span> points selected
         </div>
-        <span class="close-button">&times;</span>
       </div>
-      
-      <div class="modal-body">
-        
-        <div class="chart-section">
-          <div class="chart-controls">
-            <button id="open-traces-button" class="secondary-button">Open Traces</button>
-            <select id="chart-column-selector" class="chart-select"></select>
-            <button id="generate-chart-button" class="primary-button">Generate Chart</button>
-          </div>
+      <div class="panel-header-right">
+        <button class="panel-collapse-button" title="Collapse">-</button>
+        <span class="panel-close-button" title="Close">&times;</span>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="chart-section">
+        <div class="chart-controls" style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <select id="column-selector" class="chart-select"></select>
+          <select id="action-selector" class="chart-select">
+            <option value="chart">Chart</option>
+            <option value="copy">Copy</option>
+            <option value="open_all">Open All</option>
+            <option value="open_first">Open First</option>
+          </select>
+          <button id="execute-button" class="primary-button">Execute</button>
         </div>
-        
-        <div id="chart-container"></div>
       </div>
+
+      <div id="chart-container"></div>
     </div>
   </div>
 
+  <div id="notification-toast" class="toast"></div>
   <script type="module" src="main.js"></script>
+
+  <div id="import-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Import Data</h2>
+        <span class="close-button">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="chart-controls" style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <label for="x-column-selector">X Column:</label>
+          <select id="x-column-selector" class="chart-select"></select>
+        </div>
+        <div class="chart-controls" style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <label for="y-column-selector">Y Column:</label>
+          <select id="y-column-selector" class="chart-select"></select>
+        </div>
+        <button id="import-button" class="primary-button">Import</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

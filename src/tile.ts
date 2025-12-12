@@ -73,9 +73,17 @@ export class Tile {
    * @param parent The parent tile -- used to navigate through the tree.
    * @param deeptable The full deepscatter deeptable of which this tile is a part.
    */
-  constructor(key: string, parent: Tile | null, deeptable: Deeptable) {
+  constructor(
+    key: string,
+    parent: Tile | null,
+    deeptable: Deeptable,
+    batch?: RecordBatch,
+  ) {
     // If it's just initiated with a key, build that into a minimal manifest.
     this.key = key;
+    if (batch) {
+      this._batch = batch;
+    }
     const coords = this.key.split('/').map((value) => parseInt(value, 10));
     while (coords.length < 3) {
       coords.push(0);
@@ -98,11 +106,12 @@ export class Tile {
 
     if (deeptable.flatManifest) {
       const row = deeptable.flatManifest[tix];
-      const metadata = {
-        key: this.key,
-        min_ix: Number(row.min_ix),
-        max_ix: Number(row.max_ix),
-        extent: JSON.parse(row.extent as string) as Rectangle,
+      if (row) {
+        const metadata = {
+          key: this.key,
+          min_ix: Number(row.min_ix),
+          max_ix: Number(row.max_ix),
+          extent: JSON.parse(row.extent as string) as Rectangle,
         nPoints: Number(row.nPoints),
         children: [] as string[],
       };
@@ -113,7 +122,8 @@ export class Tile {
       }
 
       this._metadata = metadata;
-      this.highest_known_ix = metadata.max_ix;
+        this.highest_known_ix = metadata.max_ix;
+      }
     } else {
       this._metadata = null;
     }
@@ -150,10 +160,12 @@ export class Tile {
     if (!existing) {
       if (this.deeptable.transformations[colname]) {
         await this.apply_transformation(colname);
-        existing = this.record_batch.getChild(colname);
-        if (existing === null) {
+        existing = this._batch?.getChild(colname);
+        if (existing === null || existing === undefined) {
           throw new Error(`Column ${colname} not found after transformation`);
         }
+      } else {
+        throw new Error(`Column ${colname} not found and no transformation available`);
       }
     }
 
@@ -198,12 +210,20 @@ export class Tile {
     }
 
     this.transformation_holder[name] = Promise.resolve(transform(this)).then(
-      (transformed) => {
+      async (transformed) => {
         if (transformed === undefined) {
           throw new Error(
             `Transformation ${name} failed by returning empty data. ` +
               `All transformation functions must return a typedArray or Arrow Vector.`,
           );
+        }
+        // Ensure we have a batch to work with - for server-side tiles, load it first
+        if (!this._batch) {
+          await this.get_arrow(null).then((batch) => {
+            if (!this._batch) {
+              this._batch = batch;
+            }
+          });
         }
         this._batch = add_or_delete_column(this._batch, name, transformed);
       },
@@ -402,6 +422,9 @@ export class Tile {
   // all columns in it to the tile's record batch, creating the record batch
   // if it does not already exist.
   get_arrow(suffix: string | null): Promise<RecordBatch> {
+    if (suffix === null && this._batch) {
+      return Promise.resolve(this._batch);
+    }
     if (suffix === undefined) {
       throw new Error('EMPTY SUFFIX');
     }

@@ -92,6 +92,9 @@ export class ReglRenderer extends Renderer {
 
     this.aes = new AestheticSet(scatterplot, this.regl, tileSet);
 
+    // Initialize most_recent_restart to avoid errors before first plot
+    this.most_recent_restart = Date.now();
+
     // allocate buffers in 64 MB blocks.
     this.initialize_textures();
 
@@ -229,10 +232,14 @@ export class ReglRenderer extends Renderer {
     let call_no = 0;
     const needs_background_pass =
       props.background_draw_needed[0] || props.background_draw_needed[1];
-    for (const tile of this.visible_tiles()) {
+    
+    const visible = this.visible_tiles();
+    
+    for (const tile of visible) {
       // Do the binding operation; returns truthy if it's already done.
-      if (!this.bufferManager.ready(tile, this.aes.neededFields)) {
-        // console.log('Not ready for tile', tile.tix);
+      const ready = this.bufferManager.ready(tile, this.aes.neededFields);
+      
+      if (!ready) {
         continue;
       }
       const this_props = {
@@ -252,6 +259,7 @@ export class ReglRenderer extends Renderer {
         prop_list.push(background_props);
       }
     }
+    
     // Plot background first, and lower tiles before higher tiles.
     prop_list.sort((a, b) => {
       return (

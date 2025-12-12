@@ -27,7 +27,8 @@
     "test:playwright": "playwright test",
     "test:node": "node tests/dataset.spec.js; node tests/true-unit-tests.spec.js",
     "lint": "eslint src",
-    "docs": "typedoc --out docs src/deepscatter.ts"
+    "docs": "typedoc --out docs src/deepscatter.ts",
+    "install-deps": "npm install --save-dev d3-dsv @types/d3-dsv && npm outdated && npm update"
   },
   "repository": {
     "type": "git",
@@ -74,6 +75,7 @@
     "@playwright/test": "^1.46.1",
     "@sveltejs/vite-plugin-svelte": "^3.1.2",
     "@types/d3": "^7.4.3",
+    "@types/d3-dsv": "^3.0.7",
     "@types/d3-geo": "^3.1.0",
     "@types/d3-scale-chromatic": "^3.0.3",
     "@types/d3-selection": "^3.0.10",
@@ -82,6 +84,7 @@
     "@types/lodash.merge": "^4.6.9",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
+    "d3-dsv": "^3.0.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-formatter-summary-chart": "^0.3.0",

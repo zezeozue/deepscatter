@@ -105,6 +105,9 @@ export type DeeptableCreateParams = {
   // A manifest listing all the tiles in the deeptable, of the type created by
   // quadfeather v2.0.0 or greater.
   tileManifest?: Table<{key: Utf8}>;
+  
+  // An in-memory arrow table to use as the data source.
+  arrowTable?: Table;
 
   // A URL for an arrow file manifest. The schema for this manifest
   // is not yet publically documented: I hope to bundle it into the

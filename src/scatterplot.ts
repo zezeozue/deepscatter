@@ -2,6 +2,7 @@ import { BaseType, select, Selection } from 'd3-selection';
 import { range } from 'd3-array';
 import merge from 'lodash.merge';
 import { Zoom } from './interaction';
+import { Grid } from './grid';
 import { neededFieldsToPlot, ReglRenderer } from './regl_rendering';
 import { tableFromIPC, type StructRowProxy } from 'apache-arrow';
 import { Deeptable } from './Deeptable';
@@ -320,6 +321,10 @@ export class Scatterplot {
     this._zoom.attach_tiles(this.deeptable);
     this._zoom.attach_renderer('regl', this._renderer);
     this._zoom.initialize_zoom();
+    new Grid(
+      document.querySelector('#container-for-deepscatter-svg'),
+      this._zoom,
+    );
 
     // Needs the zoom built as well.
     const bkgd = select('#container-for-canvas-2d-background').select(
@@ -538,6 +543,13 @@ export class Scatterplot {
         );
       }
       await this.load_deeptable(dataSpec);
+    }
+    if (
+      this.prefs.encoding.foreground &&
+      prefs.encoding &&
+      !prefs.encoding.foreground
+    ) {
+      prefs.encoding.foreground = this.prefs.encoding.foreground;
     }
     this.update_prefs(prefs);
     // Then ensure the renderer and interaction handlers exist.

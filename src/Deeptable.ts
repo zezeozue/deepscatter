@@ -115,6 +115,7 @@ export class Deeptable {
     tileProxy,
     extent,
     tileManifest,
+    arrowTable,
     // optional with non-undefined defaults.
     rootKey = '0/0/0',
     tileStructure = 'quadtree',
@@ -123,24 +124,40 @@ export class Deeptable {
     this.tileProxy = tileProxy;
     this.tileStucture = tileStructure;
     this._extent = extent;
-
-    // If no manifest is passed, we still know
-    // that there is a root tile at the root key.
-    // const defaultManifest: Partial<DS.TileManifest> & { key: string } = {
-    //   key: rootKey,
-    //   children: undefined,
-    //   min_ix: 0,
-    //   max_ix: Number.MAX_SAFE_INTEGER,
-    //   ...(tileManifest || {}),
-    // };
-    this.flatManifest = tileManifest ? flatManifest(tileManifest) : [];
-    // Must come after manifest is set.
     this.base_url = baseUrl;
-    this.root_tile = new Tile(rootKey, null, this);
-    // At instantiation, the deeptable isn't ready; only once this
-    // async stuff is done can the deeptable be used.
-    // TODO: Add an async static method as the preferred initialization method.
-    this.promise = this._makePromise();
+
+    if (arrowTable) {
+      this.flatManifest = [];
+      const batch = arrowTable.batches[0];
+      this.root_tile = new Tile(rootKey, null, this, batch);
+      const x = batch.getChild('x')?.toArray() ?? [];
+      const y = batch.getChild('y')?.toArray() ?? [];
+      const metadata = {
+        key: '0/0/0',
+        min_ix: 0,
+        max_ix: batch.numRows - 1,
+        nPoints: batch.numRows,
+        extent: {
+          x: [Math.min(...x), Math.max(...x)] as [number, number],
+          y: [Math.min(...y), Math.max(...y)] as [number, number],
+        },
+        children: [],
+      };
+      this.root_tile._metadata = metadata;
+      // Set the highest_known_ix to the actual max
+      this.root_tile._highest_known_ix = batch.numRows - 1;
+      
+      console.log(`[Deeptable] Created in-memory table with ${batch.numRows} rows, max_ix=${batch.numRows - 1}`);
+      
+      // For in-memory data, columns already exist in the batch
+      // No transformations needed - they'll be accessed directly
+      
+      this.promise = Promise.resolve();
+    } else {
+      this.flatManifest = tileManifest ? flatManifest(tileManifest) : [];
+      this.root_tile = new Tile(rootKey, null, this);
+      this.promise = this._makePromise();
+    }
   }
 
   /**
@@ -352,7 +369,11 @@ export class Deeptable {
     table: Table,
     plot: Scatterplot | null = null,
   ): Deeptable {
-    throw new Error("`fromArrowTable` has been removed to simplify the library.")
+    return new Deeptable({
+      plot,
+      baseUrl: '', // No base URL for in-memory data
+      arrowTable: table,
+    });
   }
 
   /**

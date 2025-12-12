@@ -1,28 +1,4 @@
+
 export const config = {
-  title: "App Launch Latency",
-  columns: [
-    { name: '_device_name', numeric: false },
-    { name: '_build_id', numeric: false },
-    { name: 'event_type', numeric: false },
-    { name: 'dur', numeric: true },
-    { name: 'package', numeric: false },
-    { name: 'svg', numeric: false },
-    { name: 'cluster_id', numeric: false },
-    { name: 'trace_uuid', numeric: false, required: true, display: false }
-  ],
-  clusterReport: {
-    columns: [
-      { name: 'trace_uuid', display: 'Trace UUID', sortable: true },
-      { name: 'startup_dur', display: 'Startup Duration (ms)', sortable: true, format: 'duration' },
-      { name: 'startup_type', display: 'Type', sortable: true },
-      { name: 'package', display: 'Package', sortable: true },
-      { name: '_device_name', display: 'Device', sortable: true },
-      { name: '_build_id', display: 'Build ID', sortable: true }
-    ],
-    filterableColumns: [
-      'package',
-      '_device_name',
-      'startup_type'
-    ]
-  }
+  columns: [{'name': 'device_name', 'numeric': false}, {'name': 'build_id', 'numeric': false}, {'name': 'android_id', 'numeric': true}, {'name': 'uplfoad_date', 'numeric': false}, {'name': 'link', 'numeric': false}, {'name': 'trace_duration_mins', 'numeric': true}, {'name': 'trace_duration_with_data_mins', 'numeric': true}, {'name': 'trace_on_battery_screen_on_duration_mins', 'numeric': true}, {'name': 'trace_on_battery_screen_off_awake_duration_mins', 'numeric': true}, {'name': 'trace_on_battery_screen_off_suspended_duration_mins', 'numeric': true}, {'name': 'x', 'numeric': true}, {'name': 'y', 'numeric': true}, {'name': 'energy_wh_display', 'numeric': true}, {'name': 'energy_wh_cpucl0', 'numeric': true}, {'name': 'energy_wh_modem', 'numeric': true}, {'name': 'energy_wh_wlan_bt', 'numeric': true}, {'name': 'energy_wh_mif', 'numeric': true}, {'name': 'energy_wh_aoc', 'numeric': true}, {'name': 'blame_wh_display', 'numeric': true}, {'name': 'blame_wh_compute', 'numeric': true}, {'name': 'blame_wh_radio_cell', 'numeric': true}, {'name': 'blame_wh_radio_wifi', 'numeric': true}, {'name': 'blame_wh_cell_idle', 'numeric': true}, {'name': 'blame_wh_wifi_idle', 'numeric': true}, {'name': 'blame_wh_wakelock_app', 'numeric': true}, {'name': 'blame_wh_wakelock_kernel', 'numeric': true}, {'name': 'blame_wh_cpu_suspend', 'numeric': true}, {'name': 'blame_wh_radio_phone', 'numeric': true}, {'name': 'blame_wh_wakeup', 'numeric': true}, {'name': 'blame_wh_gms_core', 'numeric': true}, {'name': 'duration_mins_screen_off_idle', 'numeric': true}, {'name': 'duration_mins_screen_on', 'numeric': true}, {'name': 'duration_mins_wifi', 'numeric': true}, {'name': 'duration_mins_cell', 'numeric': true}],
 };

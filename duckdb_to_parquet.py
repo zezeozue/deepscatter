@@ -5,12 +5,13 @@ import os
 import argparse
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description='Convert a DuckDB table to a Parquet file.')
+parser = argparse.ArgumentParser(description='Convert a DuckDB table to a Parquet file and generate a config file.')
 parser.add_argument('db_path', type=str, help='Path to the DuckDB database file.')
 parser.add_argument('table_name', type=str, help='Name of the table to convert.')
+parser.add_argument('--x', type=str, required=True, help='The column to use for the x-axis.')
+parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
 parser.add_argument('--where', type=str, help='An optional WHERE clause to filter the data.')
 parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
-parser.add_argument('--fetch-svg', action='store_true', help='Fetch the SVG column.')
 args = parser.parse_args()
 
 # Connect to the DuckDB database
@@ -18,33 +19,54 @@ db_path = os.path.expanduser(args.db_path)
 con = duckdb.connect(database=db_path, read_only=True)
 con.execute("SET arrow_large_buffer_size=true")
 
-# Query the table
-query = f"""
-WITH Durations AS (
-    SELECT
-        min(startup_dur) as min_dur,
-        max(startup_dur) as max_dur
-    FROM {args.table_name}
-)
-SELECT
-    t.x,
-    t.y,
-    'cluster #' || CAST(t.cluster_id AS VARCHAR) as cluster_id,
-    t.trace_uuid,
-    t._device_name,
-    t._build_id,
-    t.startup_type AS event_type,
-    t.startup_dur AS dur,
-    t.package,
-    {'t.svg,' if args.fetch_svg else ''}
-    CAST(FLOOR(10 * (t.startup_dur - d.min_dur) / (d.max_dur - d.min_dur)) + 1 AS INTEGER) as class
-FROM {args.table_name} t, Durations d
+# Get table schema
+schema_query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{args.table_name}'"
+schema = con.execute(schema_query).fetchall()
+
+# Generate columns list for config.js
+config_columns = []
+select_expressions = []
+for col_name, col_type in schema:
+    is_numeric = col_type in ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL', 'REAL']
+    config_columns.append({
+        "name": col_name,
+        "numeric": is_numeric,
+    })
+    if col_name == args.x:
+        select_expressions.append(f'"{col_name}" AS x')
+    elif col_name == args.y:
+        select_expressions.append(f'"{col_name}" AS y')
+    else:
+        select_expressions.append(f'"{col_name}"')
+
+# Generate config.js
+config_js = f"""
+export const config = {{
+  columns: {str(config_columns).replace("True", "true").replace("False", "false")},
+}};
 """
+with open('config.js', 'w') as f:
+    f.write(config_js)
+
+print("Generated config.js")
+
+# Query the table
+select_clause = ", ".join(select_expressions)
+query = f"SELECT {select_clause} FROM {args.table_name}"
 # Add the WHERE clause if it's provided
 if args.where:
     query += f" WHERE {args.where}"
 
 result = con.execute(query).fetch_arrow_table()
+
+# Invert y-axis
+df = result.to_pandas()
+y_min = df['y'].min()
+y_max = df['y'].max()
+df['y'] = y_max - (df['y'] - y_min)
+result = pa.Table.from_pandas(df)
+
+print("Inverted y-axis")
 
 # Write the result to a Parquet file
 pq.write_table(result, 'f1_data.parquet')
