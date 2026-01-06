@@ -69,7 +69,9 @@
     "glsl-read-float": "^1.1.0",
     "lodash.merge": "^4.6.2",
     "rbush-3d": "^0.0.4",
-    "regl": "^2.1.0"
+    "regl": "^2.1.0",
+    "vega-embed": "^6.24.0",
+    "vega-lite": "^5.18.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.46.1",

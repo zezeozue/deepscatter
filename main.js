@@ -4,6 +4,7 @@ import { scaleOrdinal } from 'd3-scale';
 import { schemeTableau10 } from 'd3-scale-chromatic';
 import { csvParse, tsvParse } from 'd3-dsv';
 import * as arrow from 'apache-arrow';
+import vegaEmbed from 'vega-embed';
 
 const prefs = {
   source_url: '/tiles',
@@ -40,14 +41,27 @@ let selectionModeActive = false;
 let currentScatterplot = scatterplot; // Keep reference to current scatterplot
 let hasActiveSelection = false; // Track if there's an active selection
 let selectionDataBounds = null; // Store selection in data coordinates: {xMin, xMax, yMin, yMax}
+let justResized = false;
 let lastAction = null; // Track last action (chart/copy/open_first/open_all)
 let lastColumn = null; // Track last column used
 let currentSelectionData = null; // Track current selection data
 
+function clearSelectionRectangle() {
+  const selectionRectangle = document.getElementById('selection-rectangle');
+  if (selectionRectangle) {
+    selectionRectangle.style.display = 'none';
+  }
+  hasActiveSelection = false;
+  selectionDataBounds = null;
+  const panel = document.getElementById('action-panel');
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+  }
+}
+
 // Function to update selection rectangle position based on current zoom/pan
 function updateSelectionRectanglePosition() {
   if (!hasActiveSelection || !selectionDataBounds) {
-    console.log('[Rectangle] Not updating - hasActiveSelection:', hasActiveSelection, 'selectionDataBounds:', selectionDataBounds);
     return;
   }
   
@@ -77,25 +91,16 @@ function updateSelectionRectanglePosition() {
     const bottomPanelHeight = (bottomPanel && bottomPanel.classList.contains('open') && !bottomPanel.classList.contains('collapsed'))
       ? bottomPanel.offsetHeight : 0;
     
-    console.log('[Rectangle] SVG rect:', { width: svgRect.width, height: svgRect.height, left: svgRect.left, top: svgRect.top });
-    console.log('[Rectangle] Parent rect:', { width: parentRect.width, height: parentRect.height, left: parentRect.left, top: parentRect.top });
-    console.log('[Rectangle] Panel dimensions:', { sidePanelWidth, bottomPanelHeight });
-    console.log('[Rectangle] Data bounds:', selectionDataBounds);
-    
     // Convert data coordinates back to screen coordinates
     const screenX1 = x_(selectionDataBounds.xMin);
     const screenX2 = x_(selectionDataBounds.xMax);
     const screenY1 = y_(selectionDataBounds.yMin);
     const screenY2 = y_(selectionDataBounds.yMax);
     
-    console.log('[Rectangle] Screen coords before clipping:', { screenX1, screenX2, screenY1, screenY2 });
-    
     let left = Math.min(screenX1, screenX2);
     let top = Math.min(screenY1, screenY2);
     let right = Math.max(screenX1, screenX2);
     let bottom = Math.max(screenY1, screenY2);
-    
-    console.log('[Rectangle] Before clipping:', { left, top, right, bottom, width: right - left, height: bottom - top });
     
     // Calculate maximum allowed dimensions (viewport minus panels)
     const maxWidth = window.innerWidth - sidePanelWidth;
@@ -117,13 +122,9 @@ function updateSelectionRectanglePosition() {
     const width = right - left;
     const height = bottom - top;
     
-    console.log('[Rectangle] After clipping:', { left, top, right, bottom, width, height, maxWidth, maxHeight });
-    
     // Convert to parent-relative coordinates
     const finalLeft = left + (svgRect.left - parentRect.left);
     const finalTop = top + (svgRect.top - parentRect.top);
-    
-    console.log('[Rectangle] Final position:', { finalLeft, finalTop, width, height });
     
     // Only show if there's visible area
     if (width > 0 && height > 0) {
@@ -132,10 +133,8 @@ function updateSelectionRectanglePosition() {
       selectionRectangle.style.width = `${width}px`;
       selectionRectangle.style.height = `${height}px`;
       selectionRectangle.style.display = 'block';
-      console.log('[Rectangle] Rectangle updated and visible');
     } else {
       selectionRectangle.style.display = 'none';
-      console.log('[Rectangle] Rectangle hidden (no visible area)');
     }
   } catch (error) {
     console.error('[Rectangle] Error updating rectangle position:', error);
@@ -157,8 +156,19 @@ function setupSelectionRegion(plot) {
   if (svg && selectionModeActive) {
     svg.style.cursor = 'crosshair';
   }
-  
-  console.log('[Selection] Selection region handlers setup complete');
+}
+
+// Function to setup zoom event handlers for selection rectangle
+function setupZoomHandlers(plot) {
+  if (plot.zoom && plot.zoom.zoomer) {
+    plot.zoom.zoomer.on('zoom.selectionUpdate', () => {
+      updateSelectionRectanglePosition();
+    });
+    
+    plot.zoom.zoomer.on('end.selectionUpdate', () => {
+      updateSelectionRectanglePosition();
+    });
+  }
 }
 
 // Function to setup all scatterplot event handlers
@@ -311,25 +321,18 @@ scatterplot.ready.then(async () => {
         loadingOverlay.style.display = 'flex';
         
         // Create worker for parsing
-        console.log('[Main] Creating worker for file:', fileName);
         const worker = new Worker('data-parser.worker.js');
-        console.log('[Main] Worker created, sending data');
         
         worker.onmessage = async (workerEvent) => {
-          console.log('[Main] Received message from worker:', workerEvent.data.type);
           const { type, progress, text: statusText, data, message } = workerEvent.data;
           
           if (type === 'progress') {
-            console.log('[Main] Progress update:', progress + '%', statusText);
             progressBar.style.width = `${progress}%`;
             progressText.textContent = statusText;
           } else if (type === 'complete') {
-            console.log('[Main] Worker completed, data rows:', data.length);
             progressBar.style.width = '100%';
             progressText.textContent = 'Creating visualization...';
             
-            console.log(`[Data Import] Parsed ${fileName} with ${data.length} rows`);
-
             // Destroy the existing plot to clear old data
             currentScatterplot.destroy();
             
@@ -361,9 +364,6 @@ scatterplot.ready.then(async () => {
                 display: true
               });
             }
-            
-            console.log('[CSV Import] Detected columns:', columnInfo);
-            console.log('[CSV Import] Numeric columns:', [...detectedNumericColumns]);
             
             // Set x and y values BEFORE creating schema and fields
             data.forEach(d => {
@@ -425,6 +425,9 @@ scatterplot.ready.then(async () => {
             // Re-setup selection region handlers for the new scatterplot
             setupSelectionRegion(currentScatterplot);
             
+            // Re-setup zoom handlers for selection rectangle tracking
+            setupZoomHandlers(currentScatterplot);
+            
             // Update global variables for the UI
             numericColumns = detectedNumericColumns;
             
@@ -446,8 +449,6 @@ scatterplot.ready.then(async () => {
               filterColumnSelector.appendChild(option);
             }
             
-            console.log('[CSV Import] Dropdowns populated with', columnInfo.length, 'columns');
-            
             // Trigger initial filter UI update and color encoding
             void updateFilterValueInput();
             
@@ -463,7 +464,6 @@ scatterplot.ready.then(async () => {
                 // Check if this categorical column has too many unique values
                 const firstColValues = new Set(data.map(d => d[selectedColumn.name]));
                 if (firstColValues.size > 100) {
-                  console.log('[CSV Import] First column has', firstColValues.size, 'unique values, skipping auto color encoding');
                   colorColumnSelector.value = selectedColumn.name;
                   // Don't call updateColorEncoding - let user choose manually
                   loadingOverlay.style.display = 'none';
@@ -473,7 +473,6 @@ scatterplot.ready.then(async () => {
               }
               
               colorColumnSelector.value = selectedColumn.name;
-              console.log('[CSV Import] Auto-selecting column for coloring:', selectedColumn.name);
               await updateColorEncoding();
             }
             
@@ -481,10 +480,9 @@ scatterplot.ready.then(async () => {
             loadingOverlay.style.display = 'none';
             worker.terminate();
           } else if (type === 'warning') {
-            console.warn('[Main] Worker reported warning:', message);
+          } else if (type === 'warning') {
             showToast(message);
           } else if (type === 'error') {
-            console.error('[Main] Worker reported error:', message);
             alert('Error parsing file: ' + message);
             loadingOverlay.style.display = 'none';
             worker.terminate();
@@ -492,19 +490,13 @@ scatterplot.ready.then(async () => {
         };
         
         worker.onerror = (error) => {
-          console.error('[Main] Worker error event:', error);
-          console.error('[Main] Error message:', error.message);
-          console.error('[Main] Error filename:', error.filename);
-          console.error('[Main] Error lineno:', error.lineno);
           alert('Error processing file: ' + error.message);
           loadingOverlay.style.display = 'none';
           worker.terminate();
         };
         
         // Send data to worker
-        console.log('[Main] Posting message to worker, text length:', text.length);
         worker.postMessage({ text, fileName });
-        console.log('[Main] Message posted to worker');
     };
     reader.readAsText(currentFile);
   };
@@ -561,7 +553,6 @@ deepscatterDiv.addEventListener('mousedown', (e) => {
   startX = e.clientX - svgRect.left;
   startY = e.clientY - svgRect.top;
   
-  console.log('[Selection] Mouse down at', startX, startY);
 }, true);
 
 // Add mousemove event for drawing selection rectangle
@@ -602,7 +593,6 @@ deepscatterDiv.addEventListener('mousemove', (e) => {
       currentSvg.parentElement.appendChild(selectionRectangle);
     }
     selectionRectangle.style.display = 'block';
-    console.log('[Selection] Started dragging');
   }
   
   if (hasDragged) {
@@ -624,27 +614,22 @@ deepscatterDiv.addEventListener('mousemove', (e) => {
 }, true);
 
 deepscatterDiv.addEventListener('mouseup', async (e) => {
-  console.log('[Selection] Mouseup - isDrawing:', isDrawing, 'hasDragged:', hasDragged);
-  
   if (!isDrawing) return;
   e.stopPropagation();
   isDrawing = false;
   
   // Only proceed with selection if we actually dragged
   if (!hasDragged) {
-    console.log('[Selection] No drag detected, resetting state');
     hasDragged = false; // Reset for next selection
+    clearSelectionRectangle();
     return;
   }
-  
-  console.log('[Selection] Valid drag detected, setting hasActiveSelection = true');
   
   // Keep the selection rectangle visible (don't hide it)
   hasActiveSelection = true;
   
   // Reset hasDragged after a short delay to allow the selection to complete
   setTimeout(() => {
-    console.log('[Selection] Resetting hasDragged to false');
     hasDragged = false;
   }, 100);
   
@@ -677,7 +662,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
 
   // Get only visible tiles for better performance with large datasets
   const allTiles = currentScatterplot.renderer.visible_tiles();
-  console.log(`Processing ${allTiles.length} visible tiles for selection`);
   
   // First, ensure all tiles have x and y columns loaded
   const loadPromises = allTiles.map(async (tile) => {
@@ -754,11 +738,9 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     if (colorSelector && colorSelector.options.length > 0) {
       // Use columns from color selector dropdown (which has CSV columns after upload)
       allColumnsForCharts = Array.from(colorSelector.options).map(opt => opt.value);
-      console.log('[Selection] Using columns from color selector:', allColumnsForCharts);
     } else {
       // Fallback to config columns
       allColumnsForCharts = config.columns.map(c => c.name);
-      console.log('[Selection] Using columns from config:', allColumnsForCharts);
     }
     
     const tilesToLoad = new Set();
@@ -826,7 +808,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     panel.classList.remove('collapsed');
 
     const resetPanel = () => {
-      console.log('[Panel] Resetting panel and selection state');
       panel.classList.remove('open');
       panel.classList.remove('collapsed');
       // Reset chart container
@@ -838,46 +819,14 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       const selectionRectangle = document.getElementById('selection-rectangle');
       if (selectionRectangle) {
         selectionRectangle.style.display = 'none';
-        console.log('[Panel] Selection rectangle hidden');
       }
       hasActiveSelection = false;
       selectionDataBounds = null;
-      console.log('[Panel] Selection state cleared - hasActiveSelection:', hasActiveSelection, 'selectionDataBounds:', selectionDataBounds);
     };
 
     closeButton.onclick = resetPanel;
     
-    // Add global click handler to clear selection when clicking outside
-    if (!window.selectionClearHandlerSetup) {
-      document.addEventListener('click', (event) => {
-        console.log('[Click] Click detected - hasActiveSelection:', hasActiveSelection, 'hasDragged:', hasDragged);
-        
-        // Don't clear if no active selection
-        if (!hasActiveSelection) {
-          return;
-        }
-        
-        // Don't clear if we just finished dragging (the click is part of the mouseup)
-        if (hasDragged) {
-          console.log('[Click] Ignoring click - just finished dragging');
-          return;
-        }
-        
-        // Check if click is on the panel or left panel
-        const clickedOnPanel = panel.contains(event.target);
-        const clickedOnLeftPanel = document.getElementById('left-panel').contains(event.target);
-        
-        // If clicked on panel or left panel, don't clear
-        if (clickedOnPanel || clickedOnLeftPanel) {
-          return;
-        }
-        
-        // Otherwise, clear the selection (including clicks on canvas)
-        console.log('[Click] Clearing selection');
-        resetPanel();
-      });
-      window.selectionClearHandlerSetup = true;
-    }
+
 
     collapseButton.onclick = () => {
       panel.classList.toggle('collapsed');
@@ -918,6 +867,10 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
           isResizing = false;
           document.body.style.cursor = '';
           document.body.style.userSelect = '';
+          justResized = true;
+          setTimeout(() => {
+            justResized = false;
+          }, 100);
         }
       });
       
@@ -928,159 +881,63 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       const column = columnSelector.value;
       const action = document.getElementById('action-selector').value;
       
-      console.log('[Action] executeAction called - action:', action, 'column:', column);
-      console.log('[Action] currentSelectionData length:', currentSelectionData ? currentSelectionData.length : 'null');
-      
       // Save the last action and column for auto-reload
       lastAction = action;
       lastColumn = column;
       
       // Use current selection data
       if (!currentSelectionData) {
-        console.warn('[Action] No selection data available');
         return;
       }
       
       const values = currentSelectionData.map(d => d[column]);
-      console.log('[Action] Extracted', values.length, 'values from column', column);
 
       if (action === 'chart') {
         const isNumeric = numericColumns.has(column);
         chartContainer.innerHTML = '';
+        const chartData = currentSelectionData.map(d => ({ [column]: d[column] }));
 
+        // Get actual container dimensions
+        const containerWidth = chartContainer.clientWidth || 600;
+        const containerHeight = chartContainer.clientHeight || 400;
+
+        let spec;
         if (isNumeric) {
-          // Histogram for numeric data
-          const numericValues = values
-            .filter(v => v !== null && v !== undefined)
-            .map(v => Number(v))
-            .filter(v => !isNaN(v) && isFinite(v));
-
-          if (numericValues.length === 0) {
-            chartContainer.innerHTML = 'No numeric data to chart.';
-            return;
-          }
-          const numBins = 20;
-          const min = Math.min(...numericValues);
-          const max = Math.max(...numericValues);
-          
-          // Handle case where all values are the same
-          if (min === max) {
-            chartContainer.innerHTML = `All values are ${min.toFixed(2)}`;
-            return;
-          }
-          
-          const binSize = (max - min) / numBins;
-          const bins = new Array(numBins).fill(0).map(() => ({ count: 0, values: [] }));
-
-          for (const value of numericValues) {
-            const binIndex = Math.min(Math.floor((value - min) / binSize), numBins - 1);
-            if (bins[binIndex]) {
-              bins[binIndex].count++;
-              bins[binIndex].values.push(value);
+          // Histogram: width fills container, bars auto-size
+          spec = {
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            data: { values: chartData },
+            mark: { type: 'bar', tooltip: true },
+            encoding: {
+              x: { field: column, type: 'quantitative', bin: true, title: column },
+              y: { aggregate: 'count', type: 'quantitative', title: 'Count' }
+            },
+            width: containerWidth - 100,
+            height: Math.max(300, containerHeight - 40),
+            config: {
+              view: { continuousWidth: containerWidth - 100 }
             }
-          }
-
-          const maxBinCount = Math.max(...bins.map(b => b ? b.count : 0));
-          const chart = document.createElement('div');
-          chart.style.display = 'flex';
-          chart.style.flexDirection = 'column';
-          chart.style.height = '180px';
-
-          const barsContainer = document.createElement('div');
-          barsContainer.style.display = 'flex';
-          barsContainer.style.alignItems = 'flex-end';
-          barsContainer.style.justifyContent = 'space-between';
-          barsContainer.style.height = '150px';
-          barsContainer.style.borderBottom = '1px solid #ccc';
-          barsContainer.style.width = '100%';
-
-          for (let i = 0; i < bins.length; i++) {
-            const bin = bins[i] || { count: 0, values: [] };
-            const barWrapper = document.createElement('div');
-            barWrapper.style.width = `${100 / numBins}%`;
-            barWrapper.style.height = '100%';
-            barWrapper.style.display = 'flex';
-            barWrapper.style.flexDirection = 'column';
-            barWrapper.style.alignItems = 'center';
-            barWrapper.style.justifyContent = 'flex-end';
-
-            const countLabel = document.createElement('div');
-            countLabel.textContent = bin.count > 0 ? bin.count : '';
-            countLabel.style.fontSize = '10px';
-            countLabel.style.color = '#666';
-            countLabel.style.marginBottom = '2px';
-
-            const bar = document.createElement('div');
-            bar.style.width = '90%';
-            bar.style.height = `${(bin.count / maxBinCount) * 100}%`;
-            bar.style.backgroundColor = '#2196f3';
-            
-            const binMin = min + i * binSize;
-            const binMax = binMin + binSize;
-            bar.title = `Range: ${binMin.toFixed(2)} - ${binMax.toFixed(2)}\nCount: ${bin.count}`;
-            
-            barWrapper.appendChild(countLabel);
-            barWrapper.appendChild(bar);
-            barsContainer.appendChild(barWrapper);
-          }
-
-          const axisContainer = document.createElement('div');
-          axisContainer.style.display = 'flex';
-          axisContainer.style.justifyContent = 'space-between';
-          axisContainer.style.fontSize = '10px';
-          axisContainer.style.color = '#666';
-          axisContainer.style.marginTop = '2px';
-          
-          const minLabel = document.createElement('span');
-          minLabel.textContent = min.toFixed(2);
-          const maxLabel = document.createElement('span');
-          maxLabel.textContent = max.toFixed(2);
-
-          axisContainer.appendChild(minLabel);
-          axisContainer.appendChild(maxLabel);
-          
-          chart.appendChild(barsContainer);
-          chart.appendChild(axisContainer);
-          chartContainer.appendChild(chart);
+          };
         } else {
-          // Bar chart for categorical data
-          const counts = values.reduce((acc, value) => {
-            acc[value] = (acc[value] || 0) + 1;
-            return acc;
-          }, {});
-          const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-          const maxCount = sortedCounts.length > 0 ? sortedCounts[0][1] : 0;
-          const chart = document.createElement('div');
-          chart.style.maxHeight = '300px';
-          chart.style.overflowY = 'auto';
-          for (const [value, count] of sortedCounts) {
-            const barContainer = document.createElement('div');
-            barContainer.style.display = 'flex';
-            barContainer.style.alignItems = 'center';
-            barContainer.style.marginBottom = '5px';
-            barContainer.style.justifyContent = 'flex-start';
-            const label = document.createElement('div');
-            label.textContent = value;
-            label.style.width = '120px';
-            label.style.overflow = 'hidden';
-            label.style.textOverflow = 'ellipsis';
-            label.style.whiteSpace = 'nowrap';
-            label.style.marginRight = '5px';
-            const bar = document.createElement('div');
-            bar.style.width = `${(count / maxCount) * 200}px`;
-            bar.style.height = '20px';
-            bar.style.backgroundColor = '#2196f3';
-            bar.title = `${value}: ${count}`;
-            const countLabel = document.createElement('div');
-            countLabel.textContent = count;
-            countLabel.style.marginLeft = '5px';
-            barContainer.appendChild(label);
-            barContainer.appendChild(bar);
-            barContainer.appendChild(countLabel);
-            chart.appendChild(barContainer);
-          }
-          chartContainer.appendChild(chart);
+          // Categorical bar chart: fixed bar height, scrollable vertically
+          const uniqueValues = new Set(chartData.map(d => d[column]));
+          const barHeight = 25; // Fixed bar height
+          const calculatedHeight = uniqueValues.size * barHeight;
+          
+          spec = {
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            data: { values: chartData },
+            mark: { type: 'bar', tooltip: true },
+            encoding: {
+              y: { field: column, type: 'nominal', sort: '-x', title: column, axis: { labelLimit: 200 } },
+              x: { aggregate: 'count', type: 'quantitative', title: 'Count' }
+            },
+            width: containerWidth - 80,
+            height: calculatedHeight
+          };
         }
+        vegaEmbed('#chart-container', spec, { actions: false });
+
       } else {
         const links = currentSelectionData.filter(d => d[column]).map(d => d[column]);
         if (links.length === 0) {
@@ -1090,7 +947,7 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
 
         switch (action) {
           case 'copy':
-            const linksText = links.join('\n');
+            const linksText = links.map(link => `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${link}&query=`).join('\n');
             navigator.clipboard.writeText(linksText).then(() => {
               alert(`Copied ${links.length} links to clipboard.`);
             }).catch(err => {
@@ -1098,12 +955,12 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
             });
             break;
           case 'open_first':
-            window.open(links[0], '_blank');
+            window.open( `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${links[0]}&query=`, '_blank');
             break;
           case 'open_all':
             links.forEach((link, index) => {
               setTimeout(() => {
-                window.open(link, '_blank');
+                window.open( `https://apconsole.corp.google.com/link/perfetto/field_traces?uuid=${link}&query=`, '_blank');
               }, index * 200);
             });
             break;
@@ -1115,20 +972,13 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     
     // Auto-execute if we have a previous action
     if (lastAction && lastColumn) {
-      console.log('[Selection] Checking auto-execute - lastAction:', lastAction, 'lastColumn:', lastColumn);
-      console.log('[Selection] currentSelectionData available:', !!currentSelectionData);
-      
       // Set the selectors to the last used values
       const actionSelector = document.getElementById('action-selector');
       actionSelector.value = lastAction;
       columnSelector.value = lastColumn;
       
-      console.log('[Selection] Selectors set, calling executeAction()');
-      
       // Execute the action automatically
       executeAction();
-    } else {
-      console.log('[Selection] No auto-execute - lastAction:', lastAction, 'lastColumn:', lastColumn);
     }
   });
 
@@ -1186,8 +1036,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       updateFilterValueInput();
     }
     
-    console.log('[Filter] Removing filter for column:', column);
-    
     // If no filters remain, reset all filters
     if (activeFilters.size === 0) {
       await currentScatterplot.plotAPI({
@@ -1208,8 +1056,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
   }
   
   async function applyAllFilters() {
-    console.log('[Filter] applyAllFilters called, active filters:', activeFilters.size);
-    
     if (activeFilters.size === 0) {
       await currentScatterplot.plotAPI({
         encoding: {
@@ -1229,7 +1075,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     const combinedSelectionName = `combined_filter_${Date.now()}_${Math.random()}`;
     
     try {
-      console.log('[Filter] Creating combined filter selection');
       const selection = await currentScatterplot.deeptable.select_data({
         name: combinedSelectionName,
         tileFunction: async (tile) => {
@@ -1377,7 +1222,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       const selectionName = `filter_${column}_${Date.now()}`;
       
       try {
-        console.log('[Filter] Creating categorical filter selection');
         const selection = await currentScatterplot.deeptable.select_data({
           name: selectionName,
           tileFunction: async (tile) => {
@@ -1451,7 +1295,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
   
     // Only reset filter if it's categorical and no value
     if (!isNumeric && !filterValue) {
-      console.log('[Filter] Resetting filter');
       // Reset filter - remove the filter entirely and reset background opacity
       await currentScatterplot.plotAPI({
         encoding: {
@@ -1587,7 +1430,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       try {
         // Use only visible tiles for better performance
         const visibleTiles = currentScatterplot.renderer.visible_tiles();
-        console.log('[Filter] Fetching unique values from', visibleTiles.length, 'tiles');
         const promises = visibleTiles.map(async (tile) => {
           const column = await tile.get_column(filterColumn);
           for (const value of column) {
@@ -1625,40 +1467,25 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
   });
 
   function updateLegend(colorEncoding, globalMapping, dataRange = null) {
-    console.log('[Legend] updateLegend called:', {
-      transform: colorEncoding.transform,
-      field: colorEncoding.field,
-      hasDataRange: !!dataRange,
-      dataRange,
-      hasGlobalMapping: !!globalMapping
-    });
-    
     legend.innerHTML = '';
     
     // Check if this is a numeric encoding (log or linear)
     const isNumericEncoding = colorEncoding.transform === 'log' || colorEncoding.transform === 'linear';
-    console.log('[Legend] Is numeric encoding:', isNumericEncoding, 'transform:', colorEncoding.transform);
     
     if (isNumericEncoding) {
-      console.log('[Legend] Creating numeric legend with dataRange:', dataRange);
       // Create gradient for numeric data
-      console.log('[Legend] Color range length:', colorEncoding.range.length);
       let gradientColors;
       if (colorEncoding.range.length > 2) {
         // Multi-color gradient
         gradientColors = colorEncoding.range.join(', ');
-        console.log('[Legend] Using multi-color gradient');
       } else {
         // Two-color gradient
         gradientColors = `${colorEncoding.range[0]}, ${colorEncoding.range[1]}`;
-        console.log('[Legend] Using two-color gradient');
       }
       
       // Add labels to show the range
       let rangeLabels = '';
-      console.log('[Legend] Checking dataRange for labels:', dataRange);
       if (dataRange) {
-        console.log('[Legend] Creating range labels for min:', dataRange.min, 'max:', dataRange.max);
         const formatLabel = (value) => {
           const numValue = Number(value);
           // Handle edge cases
@@ -1684,9 +1511,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
             <span>${maxLabel}</span>
           </div>
         `;
-        console.log('[Legend] Created range labels:', rangeLabels);
-      } else {
-        console.log('[Legend] No dataRange provided');
       }
       
       legend.innerHTML = `
@@ -1713,15 +1537,12 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     const newColorColumn = colorColumnSelector.value;
     const isNumeric = numericColumns.has(newColorColumn);
     
-    console.log('[Color] updateColorEncoding called:', { newColorColumn, isNumeric, hasNumericColumns: numericColumns.size > 0 });
-
     let colorEncoding;
     let globalMapping = null;
     let dataRange = null;
 
     if (isNumeric) {
       const visible_tiles = currentScatterplot.renderer.visible_tiles();
-      console.log('[Color] Processing numeric column, visible tiles:', visible_tiles.length);
       let min = Infinity;
       let max = -Infinity;
       
@@ -1729,17 +1550,14 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       for (const tile of visible_tiles) {
         try {
           const column = await tile.get_column(newColorColumn);
-          console.log(`[Color] Tile ${tile.key}: got column ${newColorColumn}, length=${column.length}`);
           for (const value of column) {
             if (value < min) min = value;
             if (value > max) max = value;
           }
         } catch (error) {
-          console.error(`[Color] Error getting column ${newColorColumn} from tile ${tile.key}:`, error);
+          console.error(`Error getting column ${newColorColumn} from tile ${tile.key}:`, error);
         }
       }
-      
-      console.log(`[Color] Numeric range for ${newColorColumn}: min=${min}, max=${max}`);
       
       // Sample some actual values to verify they're numeric
       const sampleValues = [];
@@ -1751,11 +1569,9 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
           }
           break; // Just sample from first tile
         } catch (error) {
-          console.error(`[Color] Error sampling values:`, error);
+          console.error(`Error sampling values:`, error);
         }
       }
-      console.log(`[Color] Sample values from ${newColorColumn}:`, sampleValues);
-      console.log(`[Color] Sample value types:`, sampleValues.map(v => typeof v));
       
       // Convert BigInt to Number if needed
       min = Number(min);
@@ -1766,8 +1582,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       const canUseLog = min > 0 && max > 0;
       const transform = canUseLog ? 'log' : 'linear';
       
-      console.log(`[Color] Transform decision: ${transform} (min=${min}, max=${max}, canUseLog=${canUseLog})`);
-
       colorEncoding = {
         field: newColorColumn,
         transform: transform,
@@ -1775,18 +1589,9 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
         range: ['#fde725', '#a0da39', '#4ac16d', '#1fa187', '#277f8e', '#365c8d', '#46327e', '#440154'], // Extended viridis: light yellow to dark purple
       };
       
-      console.log(`[Color] Created numeric encoding:`, {
-        field: colorEncoding.field,
-        transform: colorEncoding.transform,
-        domain: colorEncoding.domain,
-        rangeLength: colorEncoding.range.length,
-        domainSpread: max - min,
-        logDomainSpread: canUseLog ? (Math.log10(max) - Math.log10(min)) : 'N/A (using linear)'
-      });
     } else {
       const allValues = new Set();
       const visible_tiles = currentScatterplot.renderer.visible_tiles();
-      console.log(`[Color] Processing categorical column, visible tiles: ${visible_tiles.length}`);
       
       // Apply active filters to determine which values should be in the legend
       const promises = visible_tiles.map(async (tile) => {
@@ -1855,7 +1660,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       globalMapping = Object.fromEntries(uniqueValues.map((val, i) => [val, i]));
 
       const factorizedColumnName = `${newColorColumn}__factorized`;
-      console.log('[Color] Creating transformation for categorical column:', factorizedColumnName);
       currentScatterplot.deeptable.transformations[factorizedColumnName] = async (tile) => {
         const baseColumn = await tile.get_column(newColorColumn);
         const transformedArray = Array.from(baseColumn).map(val => globalMapping[val] ?? 0);
@@ -1884,7 +1688,6 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       };
     }
     
-    console.log('[Color] Applying color encoding:', colorEncoding);
     await currentScatterplot.plotAPI({
       encoding: {
         color: colorEncoding,
@@ -1952,20 +1755,12 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
 
     // Check if SVG data exists and is valid
     const hasSvg = datum.svg && datum.svg.trim() && datum.svg.includes('<svg');
-    console.log('SVG check:', {
-      exists: !!datum.svg,
-      hasContent: datum.svg ? datum.svg.trim().length > 0 : false,
-      isSvg: datum.svg ? datum.svg.includes('<svg') : false,
-      preview: datum.svg ? datum.svg.substring(0, 100) + '...' : 'No data'
-    });
     
     if (hasSvg) {
       bottomPanel.classList.add('open');
       bottomPanelContent.innerHTML = `<div class="svg-container">${datum.svg}</div>`;
-      console.log('Bottom panel opened with SVG');
     } else {
       bottomPanel.classList.remove('open');
-      console.log('No valid SVG data for this point - this is normal for points without trace visualizations');
     }
     const selection = await currentScatterplot.select_data({
       id: [selectedIx],
@@ -2092,34 +1887,7 @@ document.addEventListener('keydown', (event) => {
 
 // Add zoom/pan event listeners to update selection rectangle
 scatterplot.ready.then(() => {
-  const svg = document.querySelector('#deepscatter svg#deepscatter-svg');
-  if (svg) {
-    // Listen for zoom events (mouse wheel, drag)
-    svg.addEventListener('wheel', () => {
-      setTimeout(() => updateSelectionRectanglePosition(), 50);
-    }, { passive: true });
-    
-    // Listen for drag/pan events
-    let isDragging = false;
-    svg.addEventListener('mousedown', (e) => {
-      if (!selectionModeActive) {
-        isDragging = true;
-      }
-    });
-    
-    document.addEventListener('mousemove', () => {
-      if (isDragging) {
-        updateSelectionRectanglePosition();
-      }
-    });
-    
-    document.addEventListener('mouseup', () => {
-      if (isDragging) {
-        isDragging = false;
-        updateSelectionRectanglePosition();
-      }
-    });
-  }
+  setupZoomHandlers(currentScatterplot);
 });
 
 function showToast(message) {

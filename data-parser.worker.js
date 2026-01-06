@@ -2,23 +2,17 @@
 // This runs in a separate thread to avoid blocking the UI
 
 self.onmessage = function(e) {
-  console.log('[Worker] Received message, starting parse');
   const { text, fileName } = e.data;
-  console.log('[Worker] File:', fileName, 'Size:', text.length, 'bytes');
   
   try {
     let data;
     let i = 0;
     
-    // Update progress
-    console.log('[Worker] Sending initial progress update');
     self.postMessage({ type: 'progress', progress: 10, text: 'Parsing file...' });
     
     if (fileName.endsWith('.json')) {
-      console.log('[Worker] Parsing as JSON');
       // Parse JSON
       const jsonData = JSON.parse(text);
-      console.log('[Worker] JSON parsed successfully');
       const arrayData = Array.isArray(jsonData) ? jsonData : (jsonData.data || jsonData);
       
       if (!Array.isArray(arrayData)) {
@@ -26,7 +20,6 @@ self.onmessage = function(e) {
         return;
       }
       
-      console.log('[Worker] Processing', arrayData.length, 'JSON rows');
       self.postMessage({ type: 'progress', progress: 30, text: `Processing ${arrayData.length} rows...` });
       
       // Process in chunks to allow progress updates
@@ -62,15 +55,13 @@ self.onmessage = function(e) {
       data.columns = Object.keys(data[0] || {}).filter(k => k !== 'ix');
       
     } else {
-      console.log('[Worker] Parsing as CSV/TSV');
-      // Parse CSV/TSV using simple parsing
-      // More robust CSV parsing with type detection and error handling
       // More robust CSV parsing with type detection and error handling
       const guessDelimiter = (header) => {
         const delimiters = [',', '\t', ';', '|'];
         return delimiters.sort((a, b) => header.split(b).length - header.split(a).length)[0];
       };
 
+      // Parses a CSV string, handling quoted fields and newlines.
       const parseCsv = (csvText) => {
         const rows = [];
         let inQuote = false;
@@ -85,6 +76,7 @@ self.onmessage = function(e) {
           const nextChar = i < csvText.length - 1 ? csvText[i + 1] : null;
 
           if (inQuote) {
+            // Handle escaped quotes
             if (char === '"' && nextChar === '"') {
               currentField += '"';
               i++; // Skip the next quote
@@ -125,7 +117,6 @@ self.onmessage = function(e) {
       
       const headers = parsedRows[0].data.map(h => h.replace(/^"|"$/g, ''));
       const rawData = parsedRows.slice(1);
-      console.log('[Worker] Headers:', headers);
 
       // 3. Type Detection
       const column_types = {};
@@ -143,7 +134,6 @@ self.onmessage = function(e) {
           }
         }
       }
-      console.log('[Worker] Detected column types:', column_types);
       self.postMessage({ type: 'progress', progress: 30, text: 'Detected column types...' });
       
       // 4. Full Parse with Error Handling
@@ -193,11 +183,9 @@ self.onmessage = function(e) {
       data.columns = headers;
     }
     
-    console.log('[Worker] Parsing complete, total rows:', data.length);
     self.postMessage({ type: 'progress', progress: 95, text: 'Finalizing...' });
     
     // Invert y-axis
-    console.log('[Worker] Inverting y-axis');
     let y_min = Infinity;
     let y_max = -Infinity;
 
@@ -216,15 +204,10 @@ self.onmessage = function(e) {
           row.y = y_max - (row.y - y_min);
         }
       }
-      console.log('[Worker] Y-axis inversion complete');
-    } else {
-      console.log('[Worker] No "y" column found to invert.');
     }
 
     // Send the parsed data back
-    console.log('[Worker] Sending complete message with data');
     self.postMessage({ type: 'complete', data: data });
-    console.log('[Worker] Complete message sent');
     
   } catch (error) {
     console.error('[Worker] Error during parsing:', error);

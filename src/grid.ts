@@ -32,7 +32,6 @@ export class Grid {
 
     const get_extended_ticks = (scale, ticks) => {
       const domain = scale.domain();
-      console.log('domain', domain);
 
       // If the domain is too small, d3.ticks() might return 0 or 1 ticks.
       if (ticks.length < 2) {
@@ -55,16 +54,16 @@ export class Grid {
 
       const extended_ticks = [...ticks];
 
-      // Add ticks to the beginning - extend two ticks beyond domain start
+      // Add ticks to the beginning - extend well beyond domain start
       let first_tick = ticks[0] - step;
-      while (first_tick > domain[0] - step * 2) {
+      while (first_tick > domain[0] - step * 3) {
         extended_ticks.unshift(first_tick);
         first_tick -= step;
       }
 
-      // Add ticks to the end - extend two ticks beyond domain end
+      // Add ticks to the end - extend well beyond domain end
       let last_tick = ticks[ticks.length - 1] + step;
-      while (last_tick < domain[1] + step * 2) {
+      while (last_tick < domain[1] + step * 3) {
         extended_ticks.push(last_tick);
         last_tick += step;
       }

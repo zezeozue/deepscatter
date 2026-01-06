@@ -27,6 +27,8 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: port,
+      hmr: false,
+      watch: null,
     },
     build: {
       target: 'es2019',

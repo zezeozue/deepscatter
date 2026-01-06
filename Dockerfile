@@ -21,6 +21,6 @@ RUN npm install
 # Expose port 80 for Cloud Run (vite.config.ts will read PORT env var)
 EXPOSE 80
 
-# Start the development server
+# Start the development server (HMR disabled via vite.config.ts when PORT is set)
 # The PORT environment variable will be set by Cloud Run
 CMD ["npm", "run", "dev", "--", "--host"]

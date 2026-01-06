@@ -482,7 +482,7 @@ body {
 }
 
 .panel-body {
-  padding: 24px;
+  padding: 0;
   overflow-y: auto;
   flex: 1;
 }
@@ -572,7 +572,7 @@ body {
 }
 
 #chart-container {
-  margin-top: 20px;
+  height: 100%;
 }
 
 /* Notification Toast */

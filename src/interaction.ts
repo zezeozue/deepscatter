@@ -76,6 +76,16 @@ export class Zoom {
 
     this.renderers = new Map();
 
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (this._timer) {
+          this._timer.stop();
+        }
+      } else {
+        this.restart_timer(1000);
+      }
+    });
+
     this.throttled_spawn_downloads = throttle(() => {
       const deeptable = this.deeptable;
       if (deeptable === undefined) {
