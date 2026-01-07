@@ -10,6 +10,7 @@ import {
   tableFromIPC,
   Vector,
   makeVector,
+  vectorFromArray,
   Float32,
   Int64,
   Field,
@@ -34,7 +35,7 @@ import type {
 } from './selection';
 import { DataSelection } from './selection';
 import { Some, TupleMap } from './utilityFunctions';
-import { getNestedVector } from './regl_rendering';
+import { getNestedVector } from './regl_renderer';
 import { Qid, tileKey_to_tix } from './tixrixqid';
 
 type TransformationStatus = 'queued' | 'in progress' | 'complete' | 'failed';
@@ -46,17 +47,44 @@ type Transformation = DS.Transformation;
 // Some variables are universally available.
 const defaultTransformations: Record<string, Transformation> = {
   ix: async function (tile) {
-    // console.warn(`Getting ix ${tile.key}`);
+    // For in-memory tiles without base_url, use the existing batch
+    if (!tile.deeptable.base_url || tile.deeptable.base_url === '') {
+      const batch = tile.record_batch;
+      if (batch.numRows === 0) {
+        throw new Error(`Tile ${tile.key} has no data (parent tile)`);
+      }
+      const col = batch.getChild('ix');
+      if (!col) throw new Error(`Column ix not found in tile ${tile.key}`);
+      return col as Vector<Int64 | Int32>;
+    }
     const batch = await tile.get_arrow(null);
     return batch.getChild('ix') as Vector<Int64 | Int32>;
   },
   x: async function (tile) {
-    // console.warn(`Getting x ${tile.key}`);
+    // For in-memory tiles without base_url, use the existing batch
+    if (!tile.deeptable.base_url || tile.deeptable.base_url === '') {
+      const batch = tile.record_batch;
+      if (batch.numRows === 0) {
+        throw new Error(`Tile ${tile.key} has no data (parent tile)`);
+      }
+      const col = batch.getChild('x');
+      if (!col) throw new Error(`Column x not found in tile ${tile.key}`);
+      return col as Vector<Float32>;
+    }
     const batch = await tile.get_arrow(null);
     return batch.getChild('x') as Vector<Float32>;
   },
   y: async function (tile) {
-    // console.warn(`Getting y ${tile.key}`);
+    // For in-memory tiles without base_url, use the existing batch
+    if (!tile.deeptable.base_url || tile.deeptable.base_url === '') {
+      const batch = tile.record_batch;
+      if (batch.numRows === 0) {
+        throw new Error(`Tile ${tile.key} has no data (parent tile)`);
+      }
+      const col = batch.getChild('y');
+      if (!col) throw new Error(`Column y not found in tile ${tile.key}`);
+      return col as Vector<Float32>;
+    }
     const batch = await tile.get_arrow(null);
     return batch.getChild('y') as Vector<Float32>;
   },
@@ -129,28 +157,72 @@ export class Deeptable {
     if (arrowTable) {
       this.flatManifest = [];
       const batch = arrowTable.batches[0];
-      this.root_tile = new Tile(rootKey, null, this, batch);
+      
+      // For large datasets, create a quadtree structure to enable proper tiling
+      // Use 10K threshold to ensure GPU can handle the buffers
+      const MAX_POINTS_PER_TILE = 10000;
+      
       const x = batch.getChild('x')?.toArray() ?? [];
       const y = batch.getChild('y')?.toArray() ?? [];
-      const metadata = {
-        key: '0/0/0',
-        min_ix: 0,
-        max_ix: batch.numRows - 1,
-        nPoints: batch.numRows,
-        extent: {
-          x: [Math.min(...x), Math.max(...x)] as [number, number],
-          y: [Math.min(...y), Math.max(...y)] as [number, number],
-        },
-        children: [],
-      };
-      this.root_tile._metadata = metadata;
-      // Set the highest_known_ix to the actual max
-      this.root_tile._highest_known_ix = batch.numRows - 1;
       
-      console.log(`[Deeptable] Created in-memory table with ${batch.numRows} rows, max_ix=${batch.numRows - 1}`);
+      // Calculate min/max without spread operator to avoid stack overflow on large arrays
+      let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+      for (let i = 0; i < x.length; i++) {
+        if (x[i] < xMin) xMin = x[i];
+        if (x[i] > xMax) xMax = x[i];
+        if (y[i] < yMin) yMin = y[i];
+        if (y[i] > yMax) yMax = y[i];
+      }
       
-      // For in-memory data, columns already exist in the batch
-      // No transformations needed - they'll be accessed directly
+      if (batch.numRows <= MAX_POINTS_PER_TILE) {
+        // Small dataset - use single tile
+        this.root_tile = new Tile(rootKey, null, this, batch);
+        const metadata = {
+          key: '0/0/0',
+          min_ix: 0,
+          max_ix: batch.numRows - 1,
+          nPoints: batch.numRows,
+          extent: {
+            x: [xMin, xMax] as [number, number],
+            y: [yMin, yMax] as [number, number],
+          },
+          children: [],
+        };
+        this.root_tile._metadata = metadata;
+        this.root_tile._highest_known_ix = batch.numRows - 1;
+        
+        // Set up transformations for all columns in the batch
+        this._setupColumnTransformations(batch);
+        
+        console.log(`[Deeptable] Created in-memory table with ${batch.numRows} rows (single tile)`);
+      } else {
+        // Large dataset - create virtual quadtree structure
+        // Root tile gets NO batch - children will have the actual data
+        // Don't pass a batch to avoid issues with empty batch columns
+        this.root_tile = new Tile(rootKey, null, this);
+        
+        const metadata = {
+          key: '0/0/0',
+          min_ix: 0,
+          max_ix: batch.numRows - 1,
+          nPoints: 0, // Root has no points, only children do
+          extent: {
+            x: [xMin, xMax] as [number, number],
+            y: [yMin, yMax] as [number, number],
+          },
+          children: ['1/0/0', '1/1/0', '1/0/1', '1/1/1'], // 4 quadrants at depth 1
+        };
+        this.root_tile._metadata = metadata;
+        this.root_tile._highest_known_ix = batch.numRows - 1;
+        
+        // Set up transformations for all columns in the batch
+        this._setupColumnTransformations(batch);
+        
+        // Create child tiles by spatially partitioning the data
+        this._createQuadtreeChildren(this.root_tile, batch, x, y, xMin, xMax, yMin, yMax, MAX_POINTS_PER_TILE);
+        
+        console.log(`[Deeptable] Created in-memory table with ${batch.numRows} rows (quadtree tiling)`);
+      }
       
       this.promise = Promise.resolve();
     } else {
@@ -158,6 +230,271 @@ export class Deeptable {
       this.root_tile = new Tile(rootKey, null, this);
       this.promise = this._makePromise();
     }
+  }
+
+  /**
+   * Sets up transformations for all columns in a batch so they can be accessed by tiles.
+   * For in-memory tiles, this allows the column access system to work properly.
+   */
+  private _setupColumnTransformations(batch: RecordBatch): void {
+    console.log(`[Deeptable] Setting up transformations for ${batch.schema.fields.length} columns:`,
+      batch.schema.fields.map(f => f.name).join(', '));
+    
+    for (const field of batch.schema.fields) {
+      if (!this.transformations[field.name]) {
+        this.transformations[field.name] = async (tile: Tile) => {
+          console.log(`[Transformation] Accessing column '${field.name}' for tile ${tile.key}`);
+          
+          // For in-memory tiles, the batch should already be present
+          const tileBatch = tile.record_batch;
+          
+          // Check if this is a parent tile with no actual data
+          if (tileBatch.numRows === 0) {
+            console.log(`[Transformation] Tile ${tile.key} has 0 rows - this is a parent tile with no data`);
+            throw new Error(`Tile ${tile.key} has no data (parent tile) - cannot access column ${field.name}`);
+          }
+          
+          console.log(`[Transformation] Tile ${tile.key} has batch with ${tileBatch.numRows} rows`);
+          
+          const vector = tileBatch.getChild(field.name);
+          if (vector === null || vector === undefined) {
+            console.error(`[Transformation] ERROR: Column ${field.name} not found in tile ${tile.key}`);
+            console.error(`[Transformation] Available columns:`, tileBatch.schema.fields.map(f => f.name));
+            throw new Error(`Column ${field.name} not found in tile ${tile.key}`);
+          }
+          
+          console.log(`[Transformation] Got vector for '${field.name}', type: ${vector.type}, length: ${vector.length}`);
+          // Log first few values for debugging
+          if (vector.length > 0) {
+            const sample = [];
+            for (let i = 0; i < Math.min(3, vector.length); i++) {
+              sample.push(vector.get(i));
+            }
+            console.log(`[Transformation] Sample values for '${field.name}' in tile ${tile.key}:`, sample);
+          } else {
+            console.log(`[Transformation] Vector for '${field.name}' in tile ${tile.key} is EMPTY`);
+          }
+          
+          return vector;
+        };
+      }
+    }
+  }
+
+  /**
+   * Creates child tiles by spatially partitioning the data into quadrants.
+   * This enables proper tiling for large in-memory datasets.
+   */
+  private _createQuadtreeChildren(
+    parentTile: Tile,
+    batch: RecordBatch,
+    x: Float32Array | number[],
+    y: Float32Array | number[],
+    xMin: number,
+    xMax: number,
+    yMin: number,
+    yMax: number,
+    maxPointsPerTile: number,
+  ): void {
+    const parentMetadata = parentTile._metadata;
+    if (!parentMetadata || !parentMetadata.children) {
+      return;
+    }
+
+    const xMid = (xMin + xMax) / 2;
+    const yMid = (yMin + yMax) / 2;
+
+    // Define the 4 quadrants: [z+1, x*2+dx, y*2+dy]
+    const quadrants = [
+      { key: parentMetadata.children[0], xRange: [xMin, xMid], yRange: [yMin, yMid] },     // bottom-left
+      { key: parentMetadata.children[1], xRange: [xMid, xMax], yRange: [yMin, yMid] },     // bottom-right
+      { key: parentMetadata.children[2], xRange: [xMin, xMid], yRange: [yMid, yMax] },     // top-left
+      { key: parentMetadata.children[3], xRange: [xMid, xMax], yRange: [yMid, yMax] },     // top-right
+    ];
+
+    let currentMinIx = parentMetadata.min_ix;
+
+    for (const quadrant of quadrants) {
+      // Find all points that fall within this quadrant
+      const indices: number[] = [];
+      for (let i = 0; i < x.length; i++) {
+        if (
+          x[i] >= quadrant.xRange[0] &&
+          x[i] < quadrant.xRange[1] &&
+          y[i] >= quadrant.yRange[0] &&
+          y[i] < quadrant.yRange[1]
+        ) {
+          indices.push(i);
+        }
+      }
+
+      if (indices.length === 0) {
+        // Skip empty quadrants
+        continue;
+      }
+
+      // Determine if this tile needs to be subdivided
+      const needsSubdivision = indices.length > maxPointsPerTile;
+      
+      // Create a child tile - if it needs subdivision, don't give it a batch
+      // Otherwise, give it the actual data
+      const childBatch = needsSubdivision
+        ? undefined
+        : this._createSubBatch(batch, indices);
+      
+      const childTile = new Tile(quadrant.key, parentTile, this, childBatch);
+
+      const childMetadata = {
+        key: quadrant.key,
+        min_ix: currentMinIx,
+        max_ix: currentMinIx + indices.length - 1,
+        nPoints: needsSubdivision ? 0 : indices.length, // Parent has 0 points if subdivided
+        extent: {
+          x: quadrant.xRange as [number, number],
+          y: quadrant.yRange as [number, number],
+        },
+        children: needsSubdivision ? this._getChildKeys(quadrant.key) : [],
+      };
+
+      childTile._metadata = childMetadata;
+      childTile._highest_known_ix = childMetadata.max_ix;
+
+      // Add to parent's children array
+      if (!parentTile._children) {
+        parentTile._children = [];
+      }
+      parentTile._children.push(childTile);
+
+      console.log(`[Deeptable] Created tile ${quadrant.key} with ${needsSubdivision ? 0 : indices.length} points (${indices.length} total, ${needsSubdivision ? 'subdividing' : 'leaf'})`);
+
+      currentMinIx += indices.length;
+
+      // Recursively subdivide if this quadrant is still too large
+      if (needsSubdivision) {
+        const childX = new Float32Array(indices.length);
+        const childY = new Float32Array(indices.length);
+        for (let i = 0; i < indices.length; i++) {
+          childX[i] = x[indices[i]];
+          childY[i] = y[indices[i]];
+        }
+        
+        // Create the full batch for subdivision
+        const fullChildBatch = this._createSubBatch(batch, indices);
+        
+        this._createQuadtreeChildren(
+          childTile,
+          fullChildBatch,
+          childX,
+          childY,
+          quadrant.xRange[0],
+          quadrant.xRange[1],
+          quadrant.yRange[0],
+          quadrant.yRange[1],
+          maxPointsPerTile,
+        );
+      }
+    }
+  }
+
+  /**
+   * Creates a subset RecordBatch containing only the specified indices.
+   */
+  private _createSubBatch(batch: RecordBatch, indices: number[]): RecordBatch {
+    const tb: Record<string, Data> = {};
+
+    for (const field of batch.schema.fields) {
+      const column = batch.getChild(field.name);
+      if (!column) {
+        console.log(`[_createSubBatch] Skipping field ${field.name} - column not found`);
+        continue;
+      }
+
+      // Determine the type and extract values accordingly
+      const typeId = field.type.typeId;
+      
+      if (typeId === Type.Float || typeId === Type.Float32) {
+        const values = new Float32Array(indices.length);
+        for (let i = 0; i < indices.length; i++) {
+          values[i] = column.get(indices[i]) as number;
+        }
+        tb[field.name] = makeVector({
+          type: new Float32(),
+          data: values,
+          length: values.length,
+        }).data[0];
+      } else if (typeId === Type.Int || typeId === Type.Int32) {
+        // Handle Int32 columns (like 'ix')
+        const values = new Int32Array(indices.length);
+        for (let i = 0; i < indices.length; i++) {
+          values[i] = column.get(indices[i]) as number;
+        }
+        tb[field.name] = makeVector({
+          type: new Int32(),
+          data: values,
+          length: values.length,
+        }).data[0];
+      } else if (typeId === Type.Int64) {
+        const values = new BigInt64Array(indices.length);
+        for (let i = 0; i < indices.length; i++) {
+          values[i] = BigInt(column.get(indices[i]) as number);
+        }
+        tb[field.name] = makeVector({
+          type: new Int64(),
+          data: values,
+          length: values.length,
+        }).data[0];
+      } else if (typeId === Type.Utf8) {
+        // For string columns, we need to handle them specially
+        const values: string[] = [];
+        for (let i = 0; i < indices.length; i++) {
+          const val = column.get(indices[i]);
+          values.push(val !== null && val !== undefined ? String(val) : '');
+        }
+        tb[field.name] = vectorFromArray(values).data[0];
+      } else if (typeId === Type.Dictionary) {
+        // Dictionary-encoded strings (Arrow optimization for repeated values)
+        // Extract the actual string values using column.get() which handles dictionary decoding
+        const values: string[] = [];
+        for (let i = 0; i < indices.length; i++) {
+          const val = column.get(indices[i]);
+          values.push(val !== null && val !== undefined ? String(val) : '');
+        }
+        tb[field.name] = vectorFromArray(values).data[0];
+      } else {
+        // For other types, try to extract as-is
+        const values = new Float32Array(indices.length);
+        for (let i = 0; i < indices.length; i++) {
+          values[i] = column.get(indices[i]) as number;
+        }
+        tb[field.name] = makeVector({
+          type: new Float32(),
+          data: values,
+          length: values.length,
+        }).data[0];
+      }
+    }
+
+    const newBatch = new RecordBatch(tb);
+    
+    // Copy metadata from original batch
+    for (const [k, v] of batch.schema.metadata) {
+      newBatch.schema.metadata.set(k, v);
+    }
+    
+    return newBatch;
+  }
+
+  /**
+   * Gets the child keys for a given tile key in quadtree format.
+   */
+  private _getChildKeys(key: string): string[] {
+    const [z, x, y] = key.split('/').map((d) => parseInt(d));
+    return [
+      `${z + 1}/${x * 2}/${y * 2}`,
+      `${z + 1}/${x * 2 + 1}/${y * 2}`,
+      `${z + 1}/${x * 2}/${y * 2 + 1}`,
+      `${z + 1}/${x * 2 + 1}/${y * 2 + 1}`,
+    ];
   }
 
   /**
@@ -253,6 +590,10 @@ export class Deeptable {
         x: this.domain('x') as [number, number],
         y: this.domain('y') as [number, number],
       });
+    }
+    // For in-memory datasets with quadtree tiling, the root tile metadata has the extent
+    if (this.root_tile._metadata && this.root_tile._metadata.extent) {
+      return this.root_tile._metadata.extent;
     }
     if (!this.root_tile.hasLoadedColumn('x')) {
       throw new Error("Can't access extent without a root tile");
@@ -520,11 +861,17 @@ export class Deeptable {
     const after_stack = [];
     let current: Tile | undefined;
     while ((current = stack.shift())) {
-      if (!after) {
-        callback(current);
-      } else {
-        after_stack.push(current);
+      // Skip parent tiles (tiles with no actual data points)
+      const isParentTile = current._metadata && current._metadata.nPoints === 0;
+      
+      if (!isParentTile) {
+        if (!after) {
+          callback(current);
+        } else {
+          after_stack.push(current);
+        }
       }
+      
       if (!filter(current)) {
         continue;
       }
@@ -793,6 +1140,11 @@ export class Deeptable {
 
     const scores: [number, Tile][] = [];
     function scoreFileForDownload(tile: Tile) {
+      // Skip parent tiles (tiles with no actual data points)
+      if (tile._metadata && tile._metadata.nPoints === 0) {
+        return;
+      }
+      
       if (fields.every((k) => tile.hasLoadedColumn(k))) {
         // This tile is complete ready, no action need be taken.
         return;

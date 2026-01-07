@@ -9,7 +9,7 @@ import { ScaleLinear, scaleLinear } from 'd3-scale';
 import { throttle } from 'lodash';
 // import { annotation, annotationLabel } from 'd3-svg-annotation';
 import type { Renderer } from './rendering';
-import { ReglRenderer } from './regl_rendering';
+import { ReglRenderer } from './regl_renderer';
 import { StructRowProxy } from 'apache-arrow';
 import { Rectangle } from './tile';
 import type { Deeptable } from './Deeptable';

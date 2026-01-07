@@ -3,7 +3,7 @@ import { range } from 'd3-array';
 import merge from 'lodash.merge';
 import { Zoom } from './interaction';
 import { Grid } from './grid';
-import { neededFieldsToPlot, ReglRenderer } from './regl_rendering';
+import { neededFieldsToPlot, ReglRenderer } from './regl_renderer';
 import { tableFromIPC, type StructRowProxy } from 'apache-arrow';
 import { Deeptable } from './Deeptable';
 import { Renderer } from './rendering';
@@ -311,7 +311,11 @@ export class Scatterplot {
   async reinitialize() {
     const { prefs } = this;
     await this.deeptable.promise;
-    await this.deeptable.root_tile.get_column('x');
+    // For in-memory datasets with quadtree tiling, the root tile may have no data
+    // Only try to get the column if the root tile has data
+    if (this.deeptable.root_tile.record_batch.numRows > 0) {
+      await this.deeptable.root_tile.get_column('x');
+    }
     this._renderer = new ReglRenderer(
       '#container-for-webgl-canvas',
       this.deeptable,
@@ -598,9 +602,19 @@ export class Scatterplot {
       }
       //
       const needed_keys = neededFieldsToPlot(prefs.encoding);
-      const root_call = this.deeptable.root_tile.require_columns(
-        [...needed_keys].map((k) => k[0]),
-      );
+      
+      // For in-memory datasets with quadtree tiling, the root tile may have no data
+      // Only try to require columns if the root tile has data
+      let root_call: Promise<void>;
+      if (this.deeptable.root_tile.record_batch.numRows > 0) {
+        root_call = this.deeptable.root_tile.require_columns(
+          [...needed_keys].map((k) => k[0]),
+        );
+      } else {
+        // Root tile has no data, just resolve immediately
+        root_call = Promise.resolve();
+      }
+      
       // Immediately start loading what we can onto the GPUs, too.
       for (const tile of this.renderer.visible_tiles()) {
         this._renderer.bufferManager.ready(tile, needed_keys);
@@ -682,8 +696,8 @@ export class Scatterplot {
 
     if (renderer.reglframe) {
       const r = renderer.reglframe;
+      renderer.reglframe = undefined; // Clear immediately to prevent double-cancel
       r.cancel();
-      renderer.reglframe = undefined;
     }
 
     renderer.reglframe = renderer.regl.frame(() => {

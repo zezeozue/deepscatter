@@ -930,21 +930,36 @@ if (indexMatch === -1) {
     key_field: string,
     // options: IdentifierOptions = {},
   ): Promise<void> {
+    console.log(`[Selection] add_identifier_column called: name='${name}', key_field='${key_field}', codes:`, codes);
+    console.log(`[Selection] codes type: ${typeof codes[0]}, codes length: ${codes.length}`);
+    
     if (this.deeptable.has_column(name)) {
-      throw new Error(`Column ${name} already exists, can't create`);
+      console.log(`[Selection] Column '${name}' already exists, deleting it`);
+      // Delete the existing column so we can recreate it with new data
+      this.deeptable.deleteColumn(name);
     }
+    
     if (typeof codes[0] === 'string') {
+      console.log(`[Selection] Using stringmatcher for key_field='${key_field}'`);
       const matcher = stringmatcher(key_field, codes as string[]);
       this.deeptable.transformations[name] =
         this.wrapWithSelectionMetadata(matcher);
       await this.deeptable.root_tile.apply_transformation(name);
-    } else if (typeof codes[0] === 'bigint') {
-      const matcher = bigintmatcher(key_field, codes as bigint[]);
+    } else if (typeof codes[0] === 'bigint' || typeof codes[0] === 'number') {
+      console.log(`[Selection] Using bigintmatcher for key_field='${key_field}', converting ${typeof codes[0]} to bigint`);
+      // Convert numbers to bigints for consistent handling
+      const bigintCodes = (codes as (bigint | number)[]).map(c =>
+        typeof c === 'bigint' ? c : BigInt(c)
+      );
+      console.log(`[Selection] Converted codes:`, bigintCodes);
+      const matcher = bigintmatcher(key_field, bigintCodes);
       this.deeptable.transformations[name] =
         this.wrapWithSelectionMetadata(matcher);
+      console.log(`[Selection] Applying transformation to root tile`);
       await this.deeptable.root_tile.apply_transformation(name);
+      console.log(`[Selection] Transformation applied successfully`);
     } else {
-      console.error('Unable to match type', typeof codes[0]);
+      console.error('[Selection] Unable to match type', typeof codes[0]);
     }
   }
 }
@@ -955,13 +970,40 @@ function bigintmatcher(
   subfield: string | string[] | null = null,
 ) {
   const matchings = new Set(matches);
+  // Also create a Set of number versions for Float32/Int32 columns
+  const numberMatchings = new Set(matches.map(m => Number(m)));
+  console.log(`[bigintmatcher] Created matcher for field='${field}', matching ${matches.length} values:`, matches);
+  
   return async function (tile: Tile) {
+    console.log(`[bigintmatcher] Running on tile ${tile.key}, getting column '${field}'`);
     const col = (await tile.get_column(field, subfield)).data[0];
-    const values = col.values as bigint[];
+    console.log(`[bigintmatcher] Got column data, type: ${col.type}, length: ${col.length}`);
+    
+    const values = col.values;
+    console.log(`[bigintmatcher] First few values in tile:`, Array.from(values.slice(0, 5)));
+    
     const bitmask = new Bitmask(tile.record_batch.numRows);
-    for (let i = 0; i < tile.record_batch.numRows; i++) {
-      matchings.has(values[i]) && bitmask.set(i);
+    let matchCount = 0;
+    
+    // Handle both bigint and number types
+    if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
+      for (let i = 0; i < tile.record_batch.numRows; i++) {
+        if (matchings.has(values[i] as bigint)) {
+          bitmask.set(i);
+          matchCount++;
+        }
+      }
+    } else {
+      // Float32Array, Int32Array, etc - use number matching
+      for (let i = 0; i < tile.record_batch.numRows; i++) {
+        if (numberMatchings.has(values[i] as number)) {
+          bitmask.set(i);
+          matchCount++;
+        }
+      }
     }
+    
+    console.log(`[bigintmatcher] Matched ${matchCount} out of ${tile.record_batch.numRows} rows in tile ${tile.key}`);
     return bitmask.to_arrow();
   };
 }

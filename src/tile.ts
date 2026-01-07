@@ -45,7 +45,7 @@ export class Tile {
   readonly key: string; // A unique identifier for this tile.
   protected _batch?: RecordBatch;
   parent: Tile | null;
-  private _children: Array<Tile> | null = null;
+  public _children: Array<Tile> | null = null;
   private readonly _tix: number;
   public _highest_known_ix?: number;
   public deeptable: Deeptable;
@@ -157,7 +157,9 @@ export class Tile {
       subfield === null ? [] : Array.isArray(subfield) ? subfield : [subfield];
     let existing = this._batch?.getChild(colname);
 
-    if (!existing) {
+    // For empty batches (parent tiles), always use transformations even if column exists
+    // This ensures we don't return empty columns from parent tiles
+    if (!existing || (this._batch && this._batch.numRows === 0)) {
       if (this.deeptable.transformations[colname]) {
         await this.apply_transformation(colname);
         existing = this._batch?.getChild(colname);
@@ -204,6 +206,14 @@ export class Tile {
     if (this.transformation_holder[name] !== undefined) {
       return this.transformation_holder[name];
     }
+    
+    // Skip transformations on parent tiles (tiles with no actual data)
+    if (this._metadata && this._metadata.nPoints === 0) {
+      // For parent tiles, just mark the transformation as complete without doing anything
+      this.transformation_holder[name] = Promise.resolve();
+      return this.transformation_holder[name];
+    }
+    
     const transform = this.deeptable.transformations[name];
     if (transform === undefined) {
       throw new Error(`Transformation ${name} is not defined`);
@@ -348,9 +358,10 @@ export class Tile {
     if (this._metadata) {
       // This helps support legacy code that may fetch the record_batch
       // just for its number of rows.
+      // For parent tiles with 0 points, create an empty batch
       return new RecordBatch({
         // @ts-expect-error Arrow typing doesn't match this constructor.
-        __null: vectorFromArray(Array(this.metadata.nPoints)),
+        __null: vectorFromArray(Array(this.metadata.nPoints || 0)),
       });
     }
 
@@ -428,6 +439,28 @@ export class Tile {
     if (suffix === undefined) {
       throw new Error('EMPTY SUFFIX');
     }
+    
+    // Parent tiles (with 0 points) don't have data files on the server
+    // Just like in Python quadfeather, we skip fetching them
+    if (this._metadata && this._metadata.nPoints === 0) {
+      // Return an empty batch for parent tiles
+      if (!this._batch) {
+        this._batch = new RecordBatch({
+          // @ts-expect-error Arrow typing doesn't match this constructor.
+          __null: vectorFromArray([]),
+        });
+      }
+      return Promise.resolve(this._batch);
+    }
+    
+    // For in-memory tiles (no base_url), the batch should already be present
+    if (!this.deeptable.base_url || this.deeptable.base_url === '') {
+      if (this._batch) {
+        return Promise.resolve(this._batch);
+      }
+      throw new Error(`Tile ${this.key} has no batch and cannot fetch (no base_url)`);
+    }
+    
     // By default fetches .../0/0/0.feather
     // But if you pass a suffix, gets
     // 0/0/0.suffix.feather

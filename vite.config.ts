@@ -9,18 +9,14 @@ const expressPlugin: PluginOption = {
   name: 'express-plugin',
   configureServer: async (server: ViteDevServer) => {
     server.middlewares.use(express as any);
-  }
+  },
 };
 
 export default defineConfig(({ mode }) => ({
-  plugins: [
-    glslify({ compress: false }),
-    ...svelte(),
-    expressPlugin,
-  ],
+  plugins: [glslify({ compress: false }), ...svelte(), expressPlugin],
   server: {
     host: '0.0.0.0', // Listen on all interfaces
-    port: 3347,
+    port: 3345,
     // Enable HMR in dev mode for faster development
     hmr: mode === 'development',
     watch: mode === 'development' ? {} : null,
@@ -34,14 +30,15 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       input: {
         main: __dirname + '/index.html',
-        worker: __dirname + '/data-parser.worker.js'
+        worker: __dirname + '/parser_worker.ts',
       },
       output: {
         entryFileNames: (chunkInfo) => {
-          // Keep worker filename as-is for easy reference
-          return chunkInfo.name === 'worker' ? 'data-parser.worker.js' : 'assets/[name]-[hash].js';
-        }
-      }
+          return chunkInfo.name === 'worker'
+            ? 'parser_worker.js'
+            : 'assets/[name]-[hash].js';
+        },
+      },
     },
   },
 }));
