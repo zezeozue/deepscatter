@@ -23,32 +23,24 @@ con.execute("SET arrow_large_buffer_size=true")
 schema_query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{args.table_name}'"
 schema = con.execute(schema_query).fetchall()
 
-# Generate columns list for config.js
+# Generate columns list for config.json with renamed x/y columns
 config_columns = []
 select_expressions = []
 for col_name, col_type in schema:
     is_numeric = col_type in ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL', 'REAL']
-    config_columns.append({
-        "name": col_name,
-        "numeric": is_numeric,
-    })
+    
+    # Use 'x' and 'y' in config for renamed columns
     if col_name == args.x:
+        config_columns.append({"name": "x", "numeric": is_numeric})
         select_expressions.append(f'"{col_name}" AS x')
     elif col_name == args.y:
+        config_columns.append({"name": "y", "numeric": is_numeric})
         select_expressions.append(f'"{col_name}" AS y')
     else:
+        config_columns.append({"name": col_name, "numeric": is_numeric})
         select_expressions.append(f'"{col_name}"')
 
-# Generate config.js
-config_js = f"""
-export const config = {{
-  columns: {str(config_columns).replace("True", "true").replace("False", "false")},
-}};
-"""
-with open('config.js', 'w') as f:
-    f.write(config_js)
-
-print("Generated config.js")
+print("Generated column configuration with auto-detected types")
 
 # Query the table
 select_clause = ", ".join(select_expressions)
@@ -86,3 +78,15 @@ if process.returncode != 0:
     print(f"Error executing quadfeather: {stderr.decode('utf-8')}")
 else:
     print("Quadfeather command executed successfully.")
+    
+    # Write config.json to tiles directory
+    import json
+    config_json = {
+        "columns": config_columns
+    }
+    
+    os.makedirs('tiles', exist_ok=True)
+    with open('tiles/config.json', 'w') as f:
+        json.dump(config_json, f, indent=2)
+    
+    print("Generated tiles/config.json with auto-detected column types")

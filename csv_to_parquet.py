@@ -16,9 +16,14 @@ args = parser.parse_args()
 # Read CSV and infer schema
 csv_path = os.path.expanduser(args.csv_path)
 df = pd.read_csv(csv_path)
+
+# Rename columns for x and y BEFORE generating schema
+df = df.rename(columns={args.x: 'x', args.y: 'y'})
+
+# Generate schema from renamed dataframe
 schema = pa.Schema.from_pandas(df)
 
-# Generate columns list for config.js
+# Generate columns list for config.json
 config_columns = []
 for field in schema:
     is_numeric = field.type in [pa.int64(), pa.int32(), pa.int16(), pa.int8(), pa.float64(), pa.float32(), pa.float16()]
@@ -27,19 +32,7 @@ for field in schema:
         "numeric": is_numeric,
     })
 
-# Generate config.js
-config_js = f"""
-export const config = {{
-  columns: {str(config_columns).replace("True", "true").replace("False", "false")},
-}};
-"""
-with open('config.js', 'w') as f:
-    f.write(config_js)
-
-print("Generated config.js")
-
-# Rename columns for x and y
-df = df.rename(columns={args.x: 'x', args.y: 'y'})
+print("Generated column configuration with auto-detected types")
 
 # Invert y-axis
 y_min = df['y'].min()
@@ -65,3 +58,15 @@ if process.returncode != 0:
     print(f"Error executing quadfeather: {stderr.decode('utf-8')}")
 else:
     print("Quadfeather command executed successfully.")
+    
+    # Write config.json to tiles directory
+    import json
+    config_json = {
+        "columns": config_columns
+    }
+    
+    os.makedirs('tiles', exist_ok=True)
+    with open('tiles/config.json', 'w') as f:
+        json.dump(config_json, f, indent=2)
+    
+    print("Generated tiles/config.json with auto-detected column types")

@@ -1,26 +1,43 @@
 import { Scatterplot, Deeptable } from './src/deepscatter.ts';
-import { config } from './config.js';
 import { scaleOrdinal } from 'd3-scale';
 import { schemeTableau10 } from 'd3-scale-chromatic';
 import { csvParse, tsvParse } from 'd3-dsv';
 import * as arrow from 'apache-arrow';
 import vegaEmbed from 'vega-embed';
 
-const prefs = {
+// Try to load default data from /tiles if available, otherwise start empty
+const scatterplot = new Scatterplot('#deepscatter');
+
+// Attempt to load default tiles data (optional - will fail silently if not present)
+const defaultPrefs = {
   source_url: '/tiles',
-  max_points: 2000000, // Reduced for better performance with 10k tiles
-  alpha: 15, // Adjusted for smaller points
-  zoom_balance: 0.3, // Reduced for better performance
-  point_size: 2, // Smaller points
-  background_color: '#FFFFFF', // White background
+  max_points: 2000000,
+  alpha: 15,
+  zoom_balance: 0.3,
+  point_size: 2,
+  background_color: '#FFFFFF',
   encoding: {
     x: { field: 'x', transform: 'literal' },
     y: { field: 'y', transform: 'literal' },
   },
 };
 
-const scatterplot = new Scatterplot('#deepscatter');
-scatterplot.plotAPI(prefs);
+// Try to load default data, but don't fail if it's not there
+scatterplot.plotAPI(defaultPrefs).catch(() => {
+  console.log('No default tiles data found - waiting for CSV upload');
+});
+
+// Try to load column config from tiles/config.json if available
+let tilesConfig = null;
+fetch('/tiles/config.json')
+  .then(res => res.json())
+  .then(config => {
+    tilesConfig = config;
+    console.log('Loaded tiles config:', config);
+  })
+  .catch(() => {
+    console.log('No tiles config found - columns will be populated from CSV upload');
+  });
 
 const detailPanel = document.getElementById('detail-panel');
 const detailContent = document.getElementById('detail-content');
@@ -247,7 +264,8 @@ function setupScatterplotHandlers(plot) {
   };
 }
 
-scatterplot.ready.then(async () => {
+// Setup UI - either after default data loads or when DOM is ready
+const setupUI = async () => {
   document.title = 'BrushScatter';
   const actionToolButton = document.getElementById('action-tool-button');
   const deepscatterDiv = document.getElementById('deepscatter');
@@ -982,25 +1000,43 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     }
   });
 
-  const allColumns = config.columns.filter(c => c.display !== false).map(c => c.name);
-  numericColumns = new Set(config.columns.filter(c => c.numeric).map(c => c.name)); // Assign in the ready callback
+  // Initialize columns from tiles config if available, otherwise wait for CSV
+  if (tilesConfig && tilesConfig.columns) {
+    numericColumns = new Set(tilesConfig.columns.filter(c => c.numeric).map(c => c.name));
+    
+    const firstNumericColumn = tilesConfig.columns.find(c => c.numeric);
+    
+    for (const col of tilesConfig.columns) {
+      const colName = col.name;
+      const colorOption = document.createElement('option');
+      colorOption.value = colName;
+      colorOption.text = colName;
+      if (firstNumericColumn && colName === firstNumericColumn.name) {
+        colorOption.selected = true;
+      }
+      colorColumnSelector.appendChild(colorOption);
 
-  const firstNumericColumn = config.columns.find(c => c.numeric);
-
-  for (const col of config.columns) {
-    const colName = col.name;
-    const colorOption = document.createElement('option');
-    colorOption.value = colName;
-    colorOption.text = colName;
-    if (firstNumericColumn && colName === firstNumericColumn.name) {
-      colorOption.selected = true;
+      const filterOption = document.createElement('option');
+      filterOption.value = colName;
+      filterOption.text = colName;
+      filterColumnSelector.appendChild(filterOption);
     }
-    colorColumnSelector.appendChild(colorOption);
-
-    const filterOption = document.createElement('option');
-    filterOption.value = colName;
-    filterOption.text = colName;
-    filterColumnSelector.appendChild(filterOption);
+    
+    // Trigger initial updates after scatterplot is ready
+    void updateFilterValueInput();
+    
+    // Wait for scatterplot to be ready before applying color encoding and zoom handlers
+    scatterplot.ready.then(() => {
+      updateColorEncoding();
+      // Setup zoom handlers for selection rectangle tracking
+      setupZoomHandlers(currentScatterplot);
+    }).catch(() => {
+      // If scatterplot fails to load, still allow manual color changes
+      console.log('Scatterplot not ready, color encoding will be applied on user interaction');
+    });
+  } else {
+    // Initialize empty - columns will be populated when CSV is uploaded
+    numericColumns = new Set();
   }
 
   function updateFilterChips() {
@@ -1700,11 +1736,10 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
     await updateColorEncoding();
   });
 
-  // Trigger initial legend render
-  colorColumnSelector.dispatchEvent(new Event('change'));
-
-  // Trigger initial filter render
-  void updateFilterValueInput();
+  // Note: Legend and filters will be initialized when CSV is uploaded
+  
+  // Setup initial scatterplot click handler
+  setupScatterplotHandlers(scatterplot);
 
   scatterplot.click_function = async (datum, plot, ev) => {
     if (ev.ctrlKey || ev.metaKey) {
@@ -1776,6 +1811,12 @@ deepscatterDiv.addEventListener('mouseup', async (e) => {
       }
     })
   };
+};
+
+// Try to initialize with default data, or wait for CSV upload
+scatterplot.ready.then(setupUI).catch(() => {
+  // No default data - setup UI anyway for CSV upload
+  setupUI();
 });
 
 let mousePosition = [0, 0];
@@ -1835,6 +1876,11 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   
+  // Check if zoom is initialized before using it
+  if (!currentScatterplot || !currentScatterplot.zoom) {
+    return;
+  }
+  
   const { zoom } = currentScatterplot;
   const { transform } = zoom;
   const panAmount = 10; // Reduced from 25 to 10 for smoother movement
@@ -1883,11 +1929,6 @@ document.addEventListener('keydown', (event) => {
       setTimeout(() => updateSelectionRectanglePosition(), 100);
       break;
   }
-});
-
-// Add zoom/pan event listeners to update selection rectangle
-scatterplot.ready.then(() => {
-  setupZoomHandlers(currentScatterplot);
 });
 
 function showToast(message) {
