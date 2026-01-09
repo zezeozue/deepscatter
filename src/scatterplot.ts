@@ -697,7 +697,14 @@ export class Scatterplot {
     if (renderer.reglframe) {
       const r = renderer.reglframe;
       renderer.reglframe = undefined; // Clear immediately to prevent double-cancel
-      r.cancel();
+      try {
+        r.cancel();
+      } catch (e) {
+        // Silently ignore double-cancel errors from regl
+        if (!String(e).includes('cannot cancel a frame twice')) {
+          throw e;
+        }
+      }
     }
 
     renderer.reglframe = renderer.regl.frame(() => {

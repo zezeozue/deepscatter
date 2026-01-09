@@ -3,6 +3,16 @@
 <head>
   <title>Deepscatter</title>
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Create a Trusted Types policy to handle dynamic script creation
+    if (window.trustedTypes && trustedTypes.createPolicy) {
+      trustedTypes.createPolicy('default', {
+        createHTML: (string) => string,
+        createScript: (string) => string,
+        createScriptURL: (string) => string
+      });
+    }
+  </script>
 </head>
 <body>
   <!-- Loading overlay -->

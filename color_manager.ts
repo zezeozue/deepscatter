@@ -200,8 +200,17 @@ export async function updateColorEncoding(
     globalMapping = Object.fromEntries(sorted.map((v, i) => [v, i]));
     console.log('[ColorManager] Created global mapping with', sorted.length, 'categories');
     
-    const factName = `${col}__factorized`;
+    // Use a unique name each time to avoid any caching issues
+    const factName = `${col}__factorized_${Date.now()}`;
     console.log('[ColorManager] Creating transformation for', factName);
+    
+    // Clean up old transformations for this column
+    const oldTransformKeys = Object.keys(scatterplot.deeptable.transformations).filter(
+      key => key.startsWith(`${col}__factorized`)
+    );
+    for (const key of oldTransformKeys) {
+      delete scatterplot.deeptable.transformations[key];
+    }
     
     // Create transformation that uses original table if available
     if (appState.originalTable) {

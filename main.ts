@@ -9,18 +9,18 @@ import * as arrow from 'apache-arrow';
 import type { FilterInfo, SelectionBounds, TilesConfig, ColumnInfo } from './types';
 import { appState } from './app_state';
 import { elements, querySelectors } from './src/dom';
-import { 
-  clearSelectionRectangle, 
-  updateSelectionRectanglePosition, 
-  setupSelectionRegion, 
-  setupZoomHandlers 
+import {
+  clearSelectionRectangle,
+  updateSelectionRectanglePosition,
+  setupSelectionRegion,
+  setupZoomHandlers
 } from './selection_ui';
 import { renderChart, formatNumber } from './visuals';
-import { 
-  updateFilterChips, 
-  removeFilter, 
-  applyFilter, 
-  updateFilterValueInput 
+import {
+  updateFilterChips,
+  removeFilter,
+  applyFilter,
+  updateFilterValueInput
 } from './filters';
 import { updateColorEncoding } from './color_manager';
 import { 
@@ -283,7 +283,12 @@ const setupUI = async (): Promise<void> => {
           await updateFilterValueInput(currentScatterplot, numericColumns, activeFilters);
 
           if (columnInfo.length > 0) {
-            let selectedColumn = columnInfo.find(col => col.numeric) || columnInfo[0];
+            // Priority: 1) numeric cluster column, 2) any cluster column, 3) any numeric, 4) first column
+            let selectedColumn =
+              columnInfo.find(col => col.numeric && col.name.toLowerCase().includes('cluster')) ||
+              columnInfo.find(col => col.name.toLowerCase().includes('cluster')) ||
+              columnInfo.find(col => col.numeric) ||
+              columnInfo[0];
             const firstColValues = new Set(data.map((d: any) => d[selectedColumn.name]));
             elements.colorColumnSelector.value = selectedColumn.name;
             if (firstColValues.size <= 100 || selectedColumn.numeric) {
@@ -524,6 +529,18 @@ const setupUI = async (): Promise<void> => {
       elements.filterColumnSelector.appendChild(opt);
     });
     await updateFilterValueInput(currentScatterplot, numericColumns, activeFilters);
+    
+    // Select default color column with same priority as CSV import
+    if (tilesConfig.columns.length > 0) {
+      // Priority: 1) numeric cluster column, 2) any cluster column, 3) any numeric, 4) first column
+      const selectedColumn =
+        tilesConfig.columns.find(col => col.numeric && col.name.toLowerCase().includes('cluster')) ||
+        tilesConfig.columns.find(col => col.name.toLowerCase().includes('cluster')) ||
+        tilesConfig.columns.find(col => col.numeric) ||
+        tilesConfig.columns[0];
+      elements.colorColumnSelector.value = selectedColumn.name;
+    }
+    
     scatterplot.ready.then(() => {
       console.log('[Main] Scatterplot ready, calling updateColorEncoding from tiles config');
       setupScatterplotHandlers(

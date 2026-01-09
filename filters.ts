@@ -49,23 +49,8 @@ export async function removeFilter(
     await updateFilterValueInput(scatterplot, numericColumns, activeFilters);
   }
   
-  if (activeFilters.size === 0) {
-    // Clear all filters and restore full opacity
-    await scatterplot.plotAPI({
-      encoding: {
-        filter: null,
-        foreground: null,
-      },
-      background_options: {
-        opacity: 1.0,
-        size: 1.0,
-      },
-    });
-    // Force color re-encoding to restore colors
-    await updateColorEncoding(scatterplot, numericColumns, activeFilters);
-  } else {
-    await applyAllFilters(activeFilters, scatterplot, numericColumns);
-  }
+  // Simply reapply all filters (or clear if none remain)
+  await applyAllFilters(activeFilters, scatterplot, numericColumns);
 }
 
 /**
@@ -76,14 +61,44 @@ export async function applyAllFilters(
   scatterplot: Scatterplot,
   numericColumns: Set<string>
 ): Promise<void> {
+  // Clean up old filter transformations first (always, even when clearing)
+  const oldFilterKeys = Object.keys(scatterplot.deeptable.transformations).filter(
+    key => key.startsWith('combined_filter_')
+  );
+  for (const key of oldFilterKeys) {
+    delete scatterplot.deeptable.transformations[key];
+  }
+  
   if (activeFilters.size === 0) {
+    
+    // IMPORTANT: Deepscatter caches which columns tiles need to load
+    // We must clear the prefs BEFORE calling plotAPI to prevent it from
+    // trying to load the old filter column for new tiles
+    
+    // First, force clear the prefs to remove any cached column requirements
+    if (scatterplot.prefs && scatterplot.prefs.encoding) {
+      scatterplot.prefs.encoding.foreground = null;
+      scatterplot.prefs.encoding.filter = null;
+    }
+    
+    // Now clear the encoding and reset opacity
+    // When filters are applied, background opacity is set to 0.01
+    // When we clear filters, ALL points become "background" with that low opacity
     await scatterplot.plotAPI({
       encoding: {
         filter: null,
         foreground: null,
       },
+      alpha: 1.0,  // Reset overall point opacity
+      point_size: 1.0,  // Reset point size
       background_options: { opacity: 1.0, size: 1.0 },
+      duration: 0,
     });
+    
+    // Wait a tick for the plot to settle before updating colors
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    // Update color encoding with no filters
     await updateColorEncoding(scatterplot, numericColumns, activeFilters);
     return;
   }
@@ -92,13 +107,6 @@ export async function applyAllFilters(
   const combinedName = `combined_filter_${Date.now()}`;
   
   try {
-    // Clean up old filter transformations to prevent memory leaks
-    const oldFilterKeys = Object.keys(scatterplot.deeptable.transformations).filter(
-      key => key.startsWith('combined_filter_')
-    );
-    for (const key of oldFilterKeys) {
-      delete scatterplot.deeptable.transformations[key];
-    }
     
     const selection = await scatterplot.deeptable.select_data({
       name: combinedName,
@@ -265,6 +273,10 @@ export async function updateFilterValueInput(
     sel.id = 'filter-value-selector';
     sel.innerHTML = '<option value="All">All</option>';
     
+    // Check if there's an active filter for this column to preserve selection
+    const currentFilter = activeFilters.get(col);
+    const currentValue = currentFilter?.type === 'categorical' ? String(currentFilter.value) : 'All';
+    
     const vals = new Set<any>();
     const tiles = scatterplot.renderer.visible_tiles();
     
@@ -292,6 +304,11 @@ export async function updateFilterValueInput(
       o.text = v;
       sel.appendChild(o);
     });
+    
+    // Restore the previously selected value (only if it exists in the dropdown)
+    if (currentValue && Array.from(sel.options).some(opt => opt.value === currentValue)) {
+      sel.value = currentValue;
+    }
     
     sel.onchange = () => applyFilter(activeFilters, scatterplot, numericColumns);
     elements.filterValueContainer.appendChild(sel);
