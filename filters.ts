@@ -88,13 +88,16 @@ export async function applyAllFilters(
     return;
   }
   
-  // Use a stable name for the combined filter to avoid orphaned columns
-  const combinedName = 'combined_filter_active';
+  // Use a unique name for each filter application to avoid caching issues
+  const combinedName = `combined_filter_${Date.now()}`;
   
   try {
-    // Delete any existing filter transformation first
-    if (scatterplot.deeptable.transformations[combinedName]) {
-      delete scatterplot.deeptable.transformations[combinedName];
+    // Clean up old filter transformations to prevent memory leaks
+    const oldFilterKeys = Object.keys(scatterplot.deeptable.transformations).filter(
+      key => key.startsWith('combined_filter_')
+    );
+    for (const key of oldFilterKeys) {
+      delete scatterplot.deeptable.transformations[key];
     }
     
     const selection = await scatterplot.deeptable.select_data({
