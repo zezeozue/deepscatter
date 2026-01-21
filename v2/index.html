@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deepscatter V2</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app-container">
+      <div id="side-panel">
+        <h2>Deepscatter V2</h2>
+        <button id="theme-toggle">Toggle Theme</button>
+        <input type="file" id="csv-upload" accept=".csv,.tsv,.json" style="display: none;">
+        <button id="import-csv-button">Import Data</button>
+        <div id="point-data"></div>
+      </div>
+      <div id="container"></div>
+    </div>
+    <script>
+      console.log('Index HTML executing inline script');
+      window.addEventListener('error', function(event) {
+        console.error('Global error caught:', event.message, event.error);
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        console.error('Unhandled rejection:', event.reason);
+      });
+    </script>
+    <script type="module" src="./main.ts"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+          document.getElementById('app-container').classList.toggle('dark-mode');
+        });
+
+        const importModal = document.getElementById('import-modal');
+        const importCsvButton = document.getElementById('import-csv-button');
+        const csvUpload = document.getElementById('csv-upload');
+        const closeModal = document.querySelector('.close-button');
+
+        let parsedData = null;
+        let headers = [];
+
+        importCsvButton.addEventListener('click', () => csvUpload.click());
+        closeModal.addEventListener('click', () => importModal.style.display = 'none');
+        window.addEventListener('click', (event) => {
+          if (event.target == importModal) {
+            importModal.style.display = 'none';
+          }
+        });
+
+        csvUpload.addEventListener('change', (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const text = e.target.result;
+            // Basic CSV parsing
+            const rows = text.split('\n');
+            headers = rows[0].split(',');
+            parsedData = rows.slice(1).map(row => {
+              const values = row.split(',');
+              return headers.reduce((obj, header, i) => {
+                obj[header] = values[i];
+                return obj;
+              }, {});
+            });
+
+            const xSelector = document.getElementById('x-column-selector');
+            const ySelector = document.getElementById('y-column-selector');
+            xSelector.innerHTML = '';
+            ySelector.innerHTML = '';
+            headers.forEach(header => {
+              const optionX = document.createElement('option');
+              optionX.value = header;
+              optionX.textContent = header;
+              xSelector.appendChild(optionX);
+
+              const optionY = document.createElement('option');
+              optionY.value = header;
+              optionY.textContent = header;
+              ySelector.appendChild(optionY);
+            });
+            importModal.style.display = 'block';
+          };
+          reader.readAsText(file);
+        });
+
+        document.getElementById('import-button').addEventListener('click', () => {
+          const xField = document.getElementById('x-column-selector').value;
+          const yField = document.getElementById('y-column-selector').value;
+
+          // This is a simplified data loading process.
+          // A real implementation would need to handle data tiling for performance.
+          // For now, we'll create a single, large tile.
+          const plot = window.plot;
+          if (plot && parsedData) {
+            // @ts-ignore
+            plot.loadData(parsedData, xField, yField);
+          }
+
+          importModal.style.display = 'none';
+        });
+      });
+    </script>
+    <div id="import-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Import Data</h2>
+          <span class="close-button">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="chart-controls">
+            <label for="x-column-selector">X Column:</label>
+            <select id="x-column-selector"></select>
+          </div>
+          <div class="chart-controls">
+            <label for="y-column-selector">Y Column:</label>
+            <select id="y-column-selector"></select>
+          </div>
+          <button id="import-button">Import</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
