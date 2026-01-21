@@ -4,6 +4,7 @@ async function init() {
     try {
         console.log('Attempting to import ScatterGL...');
         const { ScatterGL } = await import('./src/core/scatter_gl');
+        const { LegendRenderer } = await import('./src/aesthetics/legend');
         console.log('ScatterGL imported successfully');
 
         const container = document.getElementById('container') as HTMLElement;
@@ -15,6 +16,9 @@ async function init() {
         console.log('Container found, initializing plot...');
         const plot = new ScatterGL(container);
         
+        // Initialize legend renderer
+        const legend = new LegendRenderer('legend-container');
+        
         // Load data (stubbed)
         plot.load('tiles/')
             .then(() => console.log('Initial load request complete'))
@@ -22,6 +26,26 @@ async function init() {
 
         // @ts-ignore
         window.plot = plot;
+        // @ts-ignore
+        window.legend = legend;
+        
+        // Wire up color selector to update legend
+        const colorSelector = document.getElementById('color-by-selector') as HTMLSelectElement;
+        if (colorSelector) {
+            const originalApplyColor = plot.applyColorEncoding.bind(plot);
+            plot.applyColorEncoding = (field: string) => {
+                originalApplyColor(field);
+                const scale = plot.colorManager.getCurrentScale();
+                // Always update legend - clear if no scale, render if scale exists
+                if (scale === null) {
+                    console.log('Clearing legend because scale is null');
+                    legend.clear();
+                } else {
+                    console.log('Rendering legend with scale:', scale);
+                    legend.render(scale);
+                }
+            };
+        }
 
         const appContainer = document.getElementById('app-container');
         if (appContainer) {

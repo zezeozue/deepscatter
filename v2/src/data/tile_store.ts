@@ -1,4 +1,5 @@
 import { Tile, BBox } from './tile';
+import { Table, RecordBatch, vectorFromArray } from 'apache-arrow';
 import { TileLoader } from './tile_loader';
 
 export class TileStore {
@@ -88,6 +89,10 @@ export class TileStore {
       return Array.from(this.tiles.values()).filter(t => t.isLoaded);
   }
   
+  public getAllTiles(): Tile[] {
+      return Array.from(this.tiles.values()).filter(t => t.isLoaded);
+  }
+  
   public update(viewport: BBox) {
       console.log('TileStore update viewport:', viewport);
       this.traverse(this.rootKey, viewport);
@@ -133,5 +138,72 @@ export class TileStore {
       a.x[0] <= b.x[1] && a.x[1] >= b.x[0] &&
       a.y[0] <= b.y[1] && a.y[1] >= b.y[0]
     );
+    }
+  
+    public fromTable(table: Table, bbox: BBox) {
+      this.clear();
+      this.rootKey = '0/0/0';
+  
+      const x = table.getChild('x')!;
+      const y = table.getChild('y')!;
+  
+      const partition = (indices: Uint32Array, currentBbox: BBox, key: string) => {
+          const tile = new Tile(key, currentBbox);
+          
+          if (indices.length < 10000 || key.split('/').length > 5) {
+              const newColumns = table.schema.fields.map((field) => {
+                  const vector = table.getChild(field.name)!;
+                  const selectedValues = Array.from(indices).map(i => vector.get(i));
+                  return vectorFromArray(selectedValues, field.type);
+              });
+              const newTable = new Table(Object.fromEntries(newColumns.map((c, i) => [table.schema.fields[i].name, c])));
+              tile.data = newTable;
+              tile.isLoaded = true;
+              this.addTile(tile);
+              return;
+          }
+  
+          const [z, tx, ty] = key.split('/').map(Number);
+          const childZ = z + 1;
+          const childTX = tx * 2;
+          const childTY = ty * 2;
+          tile.children = [
+              `${childZ}/${childTX}/${childTY}`,
+              `${childZ}/${childTX + 1}/${childTY}`,
+              `${childZ}/${childTX}/${childTY + 1}`,
+              `${childZ}/${childTX + 1}/${childTY + 1}`,
+          ];
+          this.addTile(tile);
+          
+          const midX = (currentBbox.x[0] + currentBbox.x[1]) / 2;
+          const midY = (currentBbox.y[0] + currentBbox.y[1]) / 2;
+  
+          const childIndices: number[][] = [[], [], [], []];
+          
+          for (const i of indices) {
+              const xi = x.get(i)!;
+              const yi = y.get(i)!;
+              const quad = (xi > midX ? 1 : 0) + (yi > midY ? 2 : 0);
+              childIndices[quad].push(i);
+          }
+          
+          const childBBoxes: BBox[] = [
+              { x: [currentBbox.x[0], midX], y: [currentBbox.y[0], midY] },
+              { x: [midX, currentBbox.x[1]], y: [currentBbox.y[0], midY] },
+              { x: [currentBbox.x[0], midX], y: [midY, currentBbox.y[1]] },
+              { x: [midX, currentBbox.x[1]], y: [midY, currentBbox.y[1]] },
+          ];
+  
+          for (let i=0; i<4; i++) {
+              if (childIndices[i].length > 0) {
+                  partition(new Uint32Array(childIndices[i]), childBBoxes[i], tile.children[i]);
+              }
+          }
+      }
+      
+      const initialIndices = new Uint32Array(table.numRows);
+      for (let i=0; i<table.numRows; i++) initialIndices[i] = i;
+  
+      partition(initialIndices, bbox, this.rootKey);
+    }
   }
-}

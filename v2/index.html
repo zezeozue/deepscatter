@@ -9,13 +9,106 @@
   <body>
     <div id="app-container">
       <div id="side-panel">
-        <h2>Deepscatter V2</h2>
-        <button id="theme-toggle">Toggle Theme</button>
+        <div id="side-panel-header">
+          <div id="side-nav-row">
+            <button id="color-nav-btn" class="nav-btn" title="Color By">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 2a10 10 0 0 1 0 20"></path>
+              </svg>
+            </button>
+            <button id="filter-nav-btn" class="nav-btn" title="Filter">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+              </svg>
+            </button>
+            <button id="select-nav-btn" class="nav-btn" title="Select Region">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+            </button>
+            <button id="panel-collapse-btn" class="icon-btn" title="Close Panel">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div id="side-panel-content">
+          <!-- Tooltip/Point Data Panel (Default) -->
+          <div id="panel-tooltips" class="panel-view active">
+            <h3>Point Data</h3>
+            <div id="point-data"></div>
+          </div>
+
+          <!-- Color By Panel -->
+          <div id="panel-color" class="panel-view hidden">
+            <div class="panel-header">
+              <button class="back-button" data-target="panel-tooltips">&larr;</button>
+              <h3>Color By</h3>
+            </div>
+            <div class="panel-body">
+              <label for="color-by-selector">Select Column:</label>
+              <select id="color-by-selector"></select>
+              <div id="legend-container"></div>
+            </div>
+          </div>
+
+          <!-- Filter By Panel -->
+          <div id="panel-filter" class="panel-view hidden">
+            <div class="panel-header">
+              <button class="back-button" data-target="panel-tooltips">&larr;</button>
+              <h3>Filter By</h3>
+            </div>
+            <div class="panel-body">
+              <label for="filter-by-selector">Select Column:</label>
+              <select id="filter-by-selector"></select>
+              <div id="filter-controls"></div>
+            </div>
+          </div>
+
+          <!-- Select Region Panel -->
+          <div id="panel-select" class="panel-view hidden">
+            <div class="panel-header">
+              <button class="back-button" data-target="panel-tooltips">&larr;</button>
+              <h3>Select Region</h3>
+            </div>
+            <div class="panel-body">
+              <p style="color: #666; font-size: 0.9rem;">Coming soon...</p>
+            </div>
+          </div>
+        </div>
+        
         <input type="file" id="csv-upload" accept=".csv,.tsv,.json" style="display: none;">
-        <button id="import-csv-button">Import Data</button>
-        <div id="point-data"></div>
+        <div id="resize-handle"></div>
       </div>
-      <div id="container"></div>
+      
+      <div id="container">
+        <div id="floating-controls">
+          <button id="panel-expand-btn" class="floating-btn hamburger-btn" title="Open Panel" style="display: none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <button id="theme-toggle" class="floating-btn" title="Toggle Theme">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+          <button id="import-csv-button" class="floating-btn" title="Import Data">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
     <script>
       console.log('Index HTML executing inline script');
@@ -30,6 +123,7 @@
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('theme-toggle').addEventListener('click', () => {
+          document.body.classList.toggle('dark-mode');
           document.getElementById('app-container').classList.toggle('dark-mode');
         });
 
@@ -42,10 +136,117 @@
         let headers = [];
 
         importCsvButton.addEventListener('click', () => csvUpload.click());
-        closeModal.addEventListener('click', () => importModal.style.display = 'none');
+        if (closeModal) {
+          closeModal.addEventListener('click', () => importModal.style.display = 'none');
+        }
         window.addEventListener('click', (event) => {
           if (event.target == importModal) {
             importModal.style.display = 'none';
+          }
+        });
+
+        // Setup panel navigation
+        const setupNav = () => {
+          const openPanel = (panelId) => {
+            document.querySelectorAll('.panel-view').forEach(p => {
+              p.classList.add('hidden');
+              p.classList.remove('active');
+            });
+            const panel = document.getElementById(panelId);
+            if (panel) {
+              panel.classList.remove('hidden');
+              panel.classList.add('active');
+            }
+            
+            // Update nav button states
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+          };
+
+          document.getElementById('color-nav-btn').addEventListener('click', () => {
+            openPanel('panel-color');
+            document.getElementById('color-nav-btn').classList.add('active');
+          });
+          
+          document.getElementById('filter-nav-btn').addEventListener('click', () => {
+            openPanel('panel-filter');
+            document.getElementById('filter-nav-btn').classList.add('active');
+          });
+          
+          document.getElementById('select-nav-btn').addEventListener('click', () => {
+            openPanel('panel-select');
+            document.getElementById('select-nav-btn').classList.add('active');
+          });
+          
+          document.querySelectorAll('.back-button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              const targetId = e.currentTarget.getAttribute('data-target');
+              openPanel(targetId);
+            });
+          });
+        };
+        setupNav();
+
+        // Setup panel collapse/expand - will be initialized after plot is ready
+        const sidePanel = document.getElementById('side-panel');
+        const collapseBtn = document.getElementById('panel-collapse-btn');
+        const expandBtn = document.getElementById('panel-expand-btn');
+        
+        const triggerResize = () => {
+          // Force multiple resize events to ensure canvas updates
+          setTimeout(() => window.dispatchEvent(new Event('resize')), 0);
+          setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+          setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
+        };
+        
+        collapseBtn.addEventListener('click', () => {
+          sidePanel.style.width = '0px';
+          sidePanel.style.minWidth = '0px';
+          sidePanel.style.borderRight = 'none';
+          sidePanel.style.padding = '0';
+          sidePanel.style.overflow = 'hidden';
+          expandBtn.style.display = 'flex';
+          triggerResize();
+        });
+        
+        expandBtn.addEventListener('click', () => {
+          sidePanel.style.width = '350px';
+          sidePanel.style.minWidth = '350px';
+          sidePanel.style.borderRight = '1px solid #ccc';
+          sidePanel.style.padding = '';
+          sidePanel.style.overflow = '';
+          expandBtn.style.display = 'none';
+          triggerResize();
+        });
+
+        // Setup resizable side panel
+        const resizeHandle = document.getElementById('resize-handle');
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+          isResizing = true;
+          startX = e.clientX;
+          startWidth = sidePanel.offsetWidth;
+          e.preventDefault();
+          document.body.style.cursor = 'ew-resize';
+          document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (!isResizing) return;
+          const deltaX = e.clientX - startX;
+          const newWidth = Math.max(200, Math.min(800, startWidth + deltaX));
+          sidePanel.style.width = newWidth + 'px';
+          sidePanel.style.minWidth = newWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+          if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.dispatchEvent(new Event('resize'));
           }
         });
 
@@ -56,16 +257,41 @@
           const reader = new FileReader();
           reader.onload = (e) => {
             const text = e.target.result;
-            // Basic CSV parsing
-            const rows = text.split('\n');
-            headers = rows[0].split(',');
-            parsedData = rows.slice(1).map(row => {
-              const values = row.split(',');
-              return headers.reduce((obj, header, i) => {
-                obj[header] = values[i];
-                return obj;
-              }, {});
-            });
+            
+            function parseCsv(csvText) {
+              const lines = csvText.trim().split('\n');
+              const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+              const data = [];
+              const regex = /(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g;
+
+              for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+            
+                const row = {};
+                let values = lines[i].match(regex);
+                if (values) {
+                    values = values.map(v => {
+                        let value = v.startsWith(',') ? v.substring(1) : v;
+                        if (value.startsWith('"') && value.endsWith('"')) {
+                            value = value.substring(1, value.length - 1).replace(/""/g, '"');
+                        }
+                        return value.trim();
+                    });
+            
+                    for (let j = 0; j < headers.length; j++) {
+                        const value = values[j] || '';
+                        const num = parseFloat(value);
+                        row[headers[j]] = isNaN(num) || value === '' ? value : num;
+                    }
+                    data.push(row);
+                }
+              }
+              return { headers, data };
+            }
+
+            const parsed = parseCsv(text);
+            headers = parsed.headers;
+            parsedData = parsed.data;
 
             const xSelector = document.getElementById('x-column-selector');
             const ySelector = document.getElementById('y-column-selector');

@@ -91,6 +91,11 @@ export class Renderer {
     this.initHighlight();
   }
 
+  public clear() {
+    this.tileStates.clear();
+    this.bufferPool.clear();
+  }
+
   private initHighlight() {
       this.highlightProgram = this.createProgram(highlightVert, highlightFrag);
       if (!this.highlightProgram) return;

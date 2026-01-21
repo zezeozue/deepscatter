@@ -13,6 +13,7 @@ parser.add_argument('csv_path', type=str, help='Path to the CSV file.')
 parser.add_argument('--x', type=str, required=True, help='The column to use for the x-axis.')
 parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
 parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
+parser.add_argument('--categorical', type=str, help='Comma-separated list of categorical column names to index.')
 args = parser.parse_args()
 
 # Read CSV and infer schema
@@ -25,16 +26,48 @@ df = df.rename(columns={args.x: 'x', args.y: 'y'})
 # Generate schema from renamed dataframe
 schema = pa.Schema.from_pandas(df)
 
-# Generate columns list for config.json
+# Parse categorical columns
+categorical_cols = set()
+if args.categorical:
+    categorical_cols = set(col.strip() for col in args.categorical.split(','))
+    # Rename x/y if they were specified as categorical
+    if args.x in categorical_cols:
+        categorical_cols.remove(args.x)
+        categorical_cols.add('x')
+    if args.y in categorical_cols:
+        categorical_cols.remove(args.y)
+        categorical_cols.add('y')
+
+# Generate columns list for config.json with min/max for numeric columns
 config_columns = []
 for field in schema:
     is_numeric = field.type in [pa.int64(), pa.int32(), pa.int16(), pa.int8(), pa.float64(), pa.float32(), pa.float16()]
-    config_columns.append({
+    is_categorical = field.name in categorical_cols
+    
+    col_config = {
         "name": field.name,
         "numeric": is_numeric,
-    })
+        "categorical": is_categorical,
+    }
+    
+    # Add min/max for numeric columns
+    if is_numeric and field.name in df.columns:
+        col_min = float(df[field.name].min())
+        col_max = float(df[field.name].max())
+        col_config["min"] = col_min
+        col_config["max"] = col_max
+        print(f"Column {field.name}: min={col_min}, max={col_max}, count={len(df[field.name])}")
+    
+    # Add unique values for categorical columns (if reasonable size)
+    if is_categorical and field.name in df.columns:
+        unique_vals = df[field.name].unique()
+        if len(unique_vals) <= 1000:  # Only store if <= 1000 unique values
+            col_config["categories"] = sorted([str(v) for v in unique_vals])
+        col_config["num_categories"] = len(unique_vals)
+    
+    config_columns.append(col_config)
 
-print("Generated column configuration with auto-detected types")
+print("Generated column configuration with auto-detected types, min/max values, and categorical metadata")
 
 # Invert y-axis
 y_min = df['y'].min()

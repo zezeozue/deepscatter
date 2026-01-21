@@ -33,4 +33,10 @@ export class BufferPool {
       this.buffers.delete(name);
     }
   }
+
+  public clear() {
+    for (const name of this.buffers.keys()) {
+      this.deleteBuffer(name);
+    }
+  }
 }

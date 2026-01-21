@@ -15,6 +15,7 @@ parser.add_argument('--x', type=str, required=True, help='The column to use for 
 parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
 parser.add_argument('--where', type=str, help='An optional WHERE clause to filter the data.')
 parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
+parser.add_argument('--categorical', type=str, help='Comma-separated list of categorical column names to index.')
 args = parser.parse_args()
 
 # Connect to the DuckDB database
@@ -26,21 +27,34 @@ con.execute("SET arrow_large_buffer_size=true")
 schema_query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{args.table_name}'"
 schema = con.execute(schema_query).fetchall()
 
+# Parse categorical columns
+categorical_cols = set()
+if args.categorical:
+    categorical_cols = set(col.strip() for col in args.categorical.split(','))
+
 # Generate columns list for config.json with renamed x/y columns
 config_columns = []
 select_expressions = []
 for col_name, col_type in schema:
     is_numeric = col_type in ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL', 'REAL']
     
+    # Determine final name and if it's categorical
+    final_name = col_name
+    is_categorical = col_name in categorical_cols
+    
     # Use 'x' and 'y' in config for renamed columns
     if col_name == args.x:
-        config_columns.append({"name": "x", "numeric": is_numeric})
+        final_name = "x"
+        is_categorical = args.x in categorical_cols
+        config_columns.append({"name": "x", "numeric": is_numeric, "categorical": is_categorical})
         select_expressions.append(f'"{col_name}" AS x')
     elif col_name == args.y:
-        config_columns.append({"name": "y", "numeric": is_numeric})
+        final_name = "y"
+        is_categorical = args.y in categorical_cols
+        config_columns.append({"name": "y", "numeric": is_numeric, "categorical": is_categorical})
         select_expressions.append(f'"{col_name}" AS y')
     else:
-        config_columns.append({"name": col_name, "numeric": is_numeric})
+        config_columns.append({"name": col_name, "numeric": is_numeric, "categorical": is_categorical})
         select_expressions.append(f'"{col_name}"')
 
 print("Generated column configuration with auto-detected types")
@@ -59,9 +73,28 @@ df = result.to_pandas()
 y_min = df['y'].min()
 y_max = df['y'].max()
 df['y'] = y_max - (df['y'] - y_min)
+
+# Calculate min/max for numeric columns and categories for categorical columns
+for col_config in config_columns:
+    col_name = col_config["name"]
+    if col_name not in df.columns:
+        continue
+        
+    if col_config["numeric"]:
+        col_min = float(df[col_name].min())
+        col_max = float(df[col_name].max())
+        col_config["min"] = col_min
+        col_config["max"] = col_max
+    
+    if col_config.get("categorical", False):
+        unique_vals = df[col_name].unique()
+        if len(unique_vals) <= 1000:  # Only store if <= 1000 unique values
+            col_config["categories"] = sorted([str(v) for v in unique_vals])
+        col_config["num_categories"] = len(unique_vals)
+
 result = pa.Table.from_pandas(df)
 
-print("Inverted y-axis")
+print("Inverted y-axis, calculated min/max for numeric columns, and indexed categorical columns")
 
 # Write the result to a Parquet file
 pq.write_table(result, 'f1_data.parquet')
