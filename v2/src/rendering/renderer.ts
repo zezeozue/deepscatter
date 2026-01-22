@@ -25,7 +25,7 @@ export class Renderer {
   // Picking framebuffer
   private pickingFramebuffer: WebGLFramebuffer | null = null;
   private pickingTexture: WebGLTexture | null = null;
-  private pickingTextureWidth = 0;
+  private _pickingTextureWidth = 0;
   private pickingTextureHeight = 0;
 
   // Highlight state
@@ -210,14 +210,19 @@ export class Renderer {
     this.gl.enableVertexAttribArray(posLoc);
     this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
 
-    // Color buffer (for main program)
-    const colors = new Float32Array(count * 3);
-    colors.fill(1.0);
+    // Color buffer (for main program) - initialize with RGBA (4 components)
+    const colors = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+        colors[i * 4] = 1.0;     // R
+        colors[i * 4 + 1] = 1.0; // G
+        colors[i * 4 + 2] = 1.0; // B
+        colors[i * 4 + 3] = 1.0; // A
+    }
     const colorBuffer = this.bufferPool.createBuffer(`${tile.key}_color`, colors);
     const colorLoc = this.gl.getAttribLocation(this.program, 'color');
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colorBuffer);
     this.gl.enableVertexAttribArray(colorLoc);
-    this.gl.vertexAttribPointer(colorLoc, 3, this.gl.FLOAT, false, 0, 0);
+    this.gl.vertexAttribPointer(colorLoc, 4, this.gl.FLOAT, false, 0, 0);
 
     this.gl.bindVertexArray(null);
 
@@ -452,7 +457,7 @@ export class Renderer {
 
   private resizePickingTexture(width: number, height: number) {
     if (!this.pickingTexture || !this.pickingFramebuffer) return;
-    this.pickingTextureWidth = width;
+    // this.pickingTextureWidth = width;
     this.pickingTextureHeight = height;
 
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.pickingTexture);

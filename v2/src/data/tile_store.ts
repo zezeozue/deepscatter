@@ -1,5 +1,5 @@
 import { Tile, BBox } from './tile';
-import { Table, RecordBatch, vectorFromArray } from 'apache-arrow';
+import { Table, vectorFromArray } from 'apache-arrow';
 import { TileLoader } from './tile_loader';
 
 export class TileStore {

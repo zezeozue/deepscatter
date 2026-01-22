@@ -520,7 +520,7 @@ async function extractSelectionData(plot: any, xMin: number, xMax: number, yMin:
     }
 }
 
-function setupActionPanel(plot: any) {
+function setupActionPanel(_plot: any) {
     const actionPanel = document.getElementById('action-panel');
     const closeButton = actionPanel?.querySelector('.panel-close-button');
     const collapseButton = actionPanel?.querySelector('.panel-collapse-button');
@@ -730,7 +730,7 @@ function dataToScreen(plot: any, dataX: number, dataY: number): { x: number; y: 
     const canvas = document.getElementById('container')?.querySelector('canvas');
     if (!canvas) return { x: 0, y: 0 };
     
-    const rect = canvas.getBoundingClientRect();
+    // const rect = canvas.getBoundingClientRect();
     const { width, height } = canvas;
     const baseScale = Math.min(width, height);
     const dpr = window.devicePixelRatio;
@@ -896,7 +896,7 @@ async function renderChart(column: string) {
     }
 }
 
-function exportToCSV(column: string) {
+function exportToCSV(_column: string) {
     if (!currentSelectionData) return;
     
     // Get all columns

@@ -385,12 +385,15 @@
           const reader = new FileReader();
           reader.onload = (e) => {
             const text = e.target.result;
+            const fileName = file.name.toLowerCase();
             
-            function parseCsv(csvText) {
-              const lines = csvText.trim().split('\n');
-              const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            function parseDelimited(text, delimiter) {
+              const lines = text.trim().split('\n');
+              const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
               const data = [];
-              const regex = /(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g;
+              
+              // Create regex based on delimiter
+              const regex = new RegExp(`(?:^|${delimiter === '\t' ? '\\t' : delimiter})(\"(?:[^\"]+|\"\")*\"|[^${delimiter === '\t' ? '\\t' : delimiter}]*)`, 'g');
 
               for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
@@ -399,7 +402,7 @@
                 let values = lines[i].match(regex);
                 if (values) {
                     values = values.map(v => {
-                        let value = v.startsWith(',') ? v.substring(1) : v;
+                        let value = v.startsWith(delimiter) || v.startsWith('\t') ? v.substring(1) : v;
                         if (value.startsWith('"') && value.endsWith('"')) {
                             value = value.substring(1, value.length - 1).replace(/""/g, '"');
                         }
@@ -416,10 +419,43 @@
               }
               return { headers, data };
             }
+            
+            function parseJSON(text) {
+              const jsonData = JSON.parse(text);
+              if (!Array.isArray(jsonData) || jsonData.length === 0) {
+                throw new Error('JSON must be an array of objects');
+              }
+              
+              const headers = Object.keys(jsonData[0]);
+              const data = jsonData.map(item => {
+                const row = {};
+                headers.forEach(h => {
+                  const value = item[h];
+                  row[h] = value;
+                });
+                return row;
+              });
+              
+              return { headers, data };
+            }
 
-            const parsed = parseCsv(text);
-            headers = parsed.headers;
-            parsedData = parsed.data;
+            let parsed;
+            try {
+              if (fileName.endsWith('.json')) {
+                parsed = parseJSON(text);
+              } else if (fileName.endsWith('.tsv')) {
+                parsed = parseDelimited(text, '\t');
+              } else {
+                // Default to CSV
+                parsed = parseDelimited(text, ',');
+              }
+              
+              headers = parsed.headers;
+              parsedData = parsed.data;
+            } catch (error) {
+              alert('Error parsing file: ' + error.message);
+              return;
+            }
 
             const xSelector = document.getElementById('x-column-selector');
             const ySelector = document.getElementById('y-column-selector');

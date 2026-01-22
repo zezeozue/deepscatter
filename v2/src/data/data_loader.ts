@@ -1,6 +1,6 @@
 import { Table, Vector, makeVector, Float32, Utf8, vectorFromArray } from 'apache-arrow';
 import { TileStore } from '../data/tile_store';
-import { Tile } from '../data/tile';
+// import { Tile } from '../data/tile';
 
 export interface Column {
   name: string;

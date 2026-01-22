@@ -5,7 +5,7 @@ import { Controller, Transform } from '../interaction/controller';
 import { BBox, Tile } from '../data/tile';
 import { ColorManager, ColorScale } from '../aesthetics/color_manager';
 import { FilterManager } from '../aesthetics/filter_manager';
-import { DataLoader, Column, ColumnMetadata } from '../data/data_loader';
+import { DataLoader, Column } from '../data/data_loader';
 import { UIManager } from '../ui/ui_manager';
 
 interface PointSelection {
@@ -36,7 +36,7 @@ export class ScatterGL {
   private baseK: number = 1.0;
   
   // --- Render State ---
-  private spec: RenderSpec = { x: 'x', y: 'y' };
+  private _spec: RenderSpec = { x: 'x', y: 'y' };
   private specVersion: number = 0;
   private currentColorScale: ColorScale | null = null;
   
@@ -415,7 +415,7 @@ export class ScatterGL {
 
   public render(spec?: RenderSpec): void {
     if (spec) {
-      this.spec = spec;
+      // this.spec = spec;
       this.specVersion++;
     }
 
@@ -485,7 +485,7 @@ export class ScatterGL {
    * Convert screen coordinates to data coordinates
    */
   public screenToData(screenX: number, screenY: number): { x: number; y: number } {
-    const rect = this.canvas.getBoundingClientRect();
+    // const rect = this.canvas.getBoundingClientRect();
     const { width, height } = this.canvas;
     const baseScale = Math.min(width, height);
     const dpr = window.devicePixelRatio;

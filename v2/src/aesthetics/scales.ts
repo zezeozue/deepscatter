@@ -31,7 +31,7 @@ export function colorScale(domain: [number, number]): Scale<[number, number, num
         // 0.75: 1,1,0
         // 1.0: 1,0,0
         
-        const r = Math.max(0, Math.min(1, Math.abs(t - 0.75) * 4 - 1)); // Red? No this is tricky manually.
+        // const r = Math.max(0, Math.min(1, Math.abs(t - 0.75) * 4 - 1)); // Red? No this is tricky manually.
         
         // Simpler: Turbo-like (rainbow)
         // Or just mix
