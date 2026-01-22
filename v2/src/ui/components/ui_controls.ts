@@ -9,16 +9,18 @@ interface Column {
 interface ColorSelectorAttrs {
   columns: Column[];
   onChange: (field: string) => void;
+  selectedDefault: string | null;
 }
 
 interface FilterSelectorAttrs {
   columns: Column[];
   onChange: () => void;
+  selectedDefault: string | null;
 }
 
 export const ColorSelector: m.Component<ColorSelectorAttrs> = {
   view({ attrs }) {
-    const { columns, onChange } = attrs;
+    const { columns, onChange, selectedDefault } = attrs;
     
     return m('select#color-by-selector', {
       onchange: (e: Event) => {
@@ -27,7 +29,10 @@ export const ColorSelector: m.Component<ColorSelectorAttrs> = {
       }
     },
       columns.map(col =>
-        m('option', { value: col.name }, col.name)
+        m('option', {
+          value: col.name,
+          selected: col.name === selectedDefault
+        }, col.name)
       )
     );
   }
@@ -35,13 +40,16 @@ export const ColorSelector: m.Component<ColorSelectorAttrs> = {
 
 export const FilterSelector: m.Component<FilterSelectorAttrs> = {
   view({ attrs }) {
-    const { columns, onChange } = attrs;
+    const { columns, onChange, selectedDefault } = attrs;
     
     return m('select#filter-by-selector', {
       onchange: () => onChange()
     },
       columns.map(col =>
-        m('option', { value: col.name }, col.name)
+        m('option', {
+          value: col.name,
+          selected: col.name === selectedDefault
+        }, col.name)
       )
     );
   }

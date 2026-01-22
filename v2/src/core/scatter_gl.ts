@@ -26,7 +26,7 @@ export class ScatterGL {
   private controller!: Controller;
   
   // --- Managers ---
-  private dataLoader = new DataLoader();
+  public dataLoader = new DataLoader();
   private uiManager = new UIManager();
   public colorManager = new ColorManager();
   public filterManager = new FilterManager();
@@ -111,13 +111,13 @@ export class ScatterGL {
       const { tile, index } = result;
       
       if (this.isPointFiltered(tile, index)) {
-        console.log('[ScatterGL] Point is filtered, clearing hover');
+        // console.log('[ScatterGL] Point is filtered, clearing hover');
         this.clearHover();
         return;
       }
       
       if (this.shouldUpdateHover(tile.key, index)) {
-        console.log('[ScatterGL] Hovering over point:', tile.key, index);
+        // console.log('[ScatterGL] Hovering over point:', tile.key, index);
         this.hoveredPoint = { tileKey: tile.key, index };
         this.updatePointInfo(result);
       }
@@ -175,7 +175,7 @@ export class ScatterGL {
 
   private clearHover(): void {
     if (this.hoveredPoint) {
-      console.log('[ScatterGL] Clearing hover');
+      // console.log('[ScatterGL] Clearing hover');
       this.hoveredPoint = null;
       this.uiManager.renderPointInfo(null);
     }
@@ -197,19 +197,19 @@ export class ScatterGL {
 
   private updatePointInfo(result: { tile: Tile; index: number }): void {
     if (!result.tile.data) {
-      console.warn('[ScatterGL] Tile has no data');
+      // console.warn('[ScatterGL] Tile has no data');
       this.uiManager.renderPointInfo(null);
       return;
     }
 
     const row = result.tile.data.get(result.index);
     if (!row) {
-      console.warn('[ScatterGL] Could not get row data');
+      // console.warn('[ScatterGL] Could not get row data');
       this.uiManager.renderPointInfo(null);
       return;
     }
 
-    console.log('[ScatterGL] Updating point info with data');
+    // console.log('[ScatterGL] Updating point info with data');
     this.uiManager.renderPointInfo(row.toJSON());
   }
 
@@ -231,13 +231,26 @@ export class ScatterGL {
     }
   }
 
-  public loadData(data: any[], xField: string, yField: string): void {
-    console.log('loadData called with:', { data, xField, yField });
+  public loadData(data: any[], xField: string, yField: string, defaultColumn?: string | null): void {
+    console.log('loadData called with:', { data, xField, yField, defaultColumn });
     
     this.renderer.clear();
     const { columns, extent } = this.dataLoader.loadFromArray(data, xField, yField, this.tileStore);
     
     this.columns = columns;
+    
+    // Set the user-specified default column if provided and valid
+    if (defaultColumn) {
+      const col = columns.find(c => c.name === defaultColumn);
+      if (col && (col.numeric || col.categorical)) {
+        // Store it in the dataLoader so it takes precedence over heuristics
+        (this.dataLoader as any).defaultColumn = defaultColumn;
+        console.log('Using user-specified default column:', defaultColumn);
+      } else {
+        console.warn('Invalid default column specified:', defaultColumn);
+      }
+    }
+    
     this.renderUIControls();
     this.fitToExtent(extent.minX, extent.maxX, extent.minY, extent.maxY);
   }
@@ -247,7 +260,10 @@ export class ScatterGL {
   // ============================================================================
 
   private renderUIControls(): void {
-    console.log('[ScatterGL] Rendering UI controls with', this.columns.length, 'columns');
+    // console.log('[ScatterGL] Rendering UI controls with', this.columns.length, 'columns');
+    // Use centralized default column selection from DataLoader
+    const selectedDefault = this.dataLoader.selectDefaultColumn(this.columns);
+    this.uiManager.setSelectedDefault(selectedDefault);
     this.uiManager.renderAllControls(
       this.columns,
       (field) => this.applyColorEncoding(field),
@@ -318,7 +334,7 @@ export class ScatterGL {
       y: [Math.min(y0, y1), Math.max(y0, y1)]
     };
     
-    console.log('Update Viewport:', viewport);
+    // console.log('Update Viewport:', viewport);
     this.tileStore.update(viewport);
   }
 

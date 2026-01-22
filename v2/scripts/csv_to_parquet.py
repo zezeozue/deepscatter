@@ -14,6 +14,7 @@ parser.add_argument('--x', type=str, required=True, help='The column to use for 
 parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
 parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
 parser.add_argument('--categorical', type=str, help='Comma-separated list of categorical column names to index.')
+parser.add_argument('--default_column', type=str, help='Default column for color/filter selectors (must be numeric or categorical).')
 args = parser.parse_args()
 
 # Read CSV and infer schema
@@ -98,6 +99,27 @@ else:
     config_json = {
         "columns": config_columns
     }
+    
+    # Add default column if specified
+    if args.default_column:
+        # Rename if it was x or y
+        default_col = args.default_column
+        if default_col == args.x:
+            default_col = 'x'
+        elif default_col == args.y:
+            default_col = 'y'
+        
+        # Verify it exists and is numeric or categorical
+        col_exists = any(c['name'] == default_col for c in config_columns)
+        if col_exists:
+            col_info = next(c for c in config_columns if c['name'] == default_col)
+            if col_info['numeric'] or col_info['categorical']:
+                config_json['default_column'] = default_col
+                print(f"Set default column to: {default_col}")
+            else:
+                print(f"Warning: {default_col} is not numeric or categorical, skipping default_column")
+        else:
+            print(f"Warning: {default_col} not found in columns, skipping default_column")
     
     os.makedirs('tiles', exist_ok=True)
     with open('tiles/config.json', 'w') as f:

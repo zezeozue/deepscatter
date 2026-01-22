@@ -27,6 +27,7 @@ export interface DataExtent {
  */
 export class DataLoader {
   private columnMetadata = new Map<string, ColumnMetadata>();
+  private defaultColumn?: string;
 
   /**
    * Load and process config metadata from URL
@@ -49,6 +50,11 @@ export class DataLoader {
   private processConfig(config: any): void {
     if (!config.columns) return;
     
+    // Store default column if specified
+    if (config.default_column) {
+      this.defaultColumn = config.default_column;
+    }
+    
     for (const col of config.columns) {
       const metadata: ColumnMetadata = {};
       
@@ -66,6 +72,13 @@ export class DataLoader {
         this.columnMetadata.set(col.name, metadata);
       }
     }
+  }
+
+  /**
+   * Get the default column from config
+   */
+  getDefaultColumn(): string | undefined {
+    return this.defaultColumn;
   }
 
   /**
@@ -235,5 +248,45 @@ export class DataLoader {
     });
     
     return { columns, extent };
+  }
+
+  /**
+   * Select default column based on heuristics:
+   * 1. Use config default if provided and valid
+   * 2. Look for column with 'cluster' in name (numeric or categorical)
+   * 3. Prefer categorical columns
+   * 4. Fall back to numeric columns
+   * 5. Use any column if nothing else matches
+   *
+   * This is the single source of truth for default column selection.
+   */
+  selectDefaultColumn(columns: Column[]): string | null {
+    if (columns.length === 0) return null;
+
+    // 1. Use config default if it exists and is valid
+    if (this.defaultColumn) {
+      const specified = columns.find(c => c.name === this.defaultColumn);
+      if (specified && (specified.numeric || specified.categorical)) {
+        return specified.name;
+      }
+    }
+
+    // 2. Look for 'cluster' in column name (numeric or categorical)
+    const clusterCol = columns.find(c =>
+      c.name.toLowerCase().includes('cluster') &&
+      (c.numeric || c.categorical)
+    );
+    if (clusterCol) return clusterCol.name;
+
+    // 3. Prefer categorical columns
+    const categoricalCol = columns.find(c => c.categorical);
+    if (categoricalCol) return categoricalCol.name;
+
+    // 4. Fall back to numeric columns
+    const numericCol = columns.find(c => c.numeric);
+    if (numericCol) return numericCol.name;
+
+    // 5. Use any column as last resort
+    return columns[0].name;
   }
 }

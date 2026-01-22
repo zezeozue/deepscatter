@@ -13,14 +13,23 @@ export interface Column {
  * Manages UI rendering with Mithril components
  */
 export class UIManager {
+  private selectedDefault: string | null = null;
+
+  /**
+   * Set the selected default column
+   */
+  setSelectedDefault(selectedDefault: string | null): void {
+    this.selectedDefault = selectedDefault;
+  }
+
   /**
    * Render color selector dropdown
    */
   renderColorSelector(columns: Column[], onColorChange: (field: string) => void): void {
-    console.log('[UIManager] Rendering color selector with', columns.length, 'columns');
+    // console.log('[UIManager] Rendering color selector with', columns.length, 'columns');
     const colorBy = document.getElementById('color-by-selector');
     if (!colorBy) {
-      console.warn('[UIManager] color-by-selector element not found');
+      // console.warn('[UIManager] color-by-selector element not found');
       return;
     }
     
@@ -32,7 +41,8 @@ export class UIManager {
     const tempDiv = document.createElement('div');
     m.render(tempDiv, m(ColorSelector, {
       columns,
-      onChange: onColorChange
+      onChange: onColorChange,
+      selectedDefault: this.selectedDefault
     }));
     
     const newSelect = tempDiv.firstChild as HTMLSelectElement;
@@ -43,7 +53,7 @@ export class UIManager {
       // Apply default color encoding if columns exist
       // Use setTimeout to avoid interfering with initial render
       if (columns.length > 0 && newSelect.value) {
-        console.log('[UIManager] Auto-applying color encoding for:', newSelect.value);
+        // console.log('[UIManager] Auto-applying color encoding for:', newSelect.value);
         setTimeout(() => onColorChange(newSelect.value), 0);
       }
     }
@@ -53,10 +63,10 @@ export class UIManager {
    * Render filter selector dropdown
    */
   renderFilterSelector(columns: Column[], onFilterChange: () => void): void {
-    console.log('[UIManager] Rendering filter selector with', columns.length, 'columns');
+    // console.log('[UIManager] Rendering filter selector with', columns.length, 'columns');
     const filterBy = document.getElementById('filter-by-selector');
     if (!filterBy) {
-      console.warn('[UIManager] filter-by-selector element not found');
+      // console.warn('[UIManager] filter-by-selector element not found');
       return;
     }
     
@@ -68,7 +78,8 @@ export class UIManager {
     const tempDiv = document.createElement('div');
     m.render(tempDiv, m(FilterSelector, {
       columns,
-      onChange: onFilterChange
+      onChange: onFilterChange,
+      selectedDefault: this.selectedDefault
     }));
     
     const newSelect = tempDiv.firstChild;
@@ -79,7 +90,7 @@ export class UIManager {
       // Initialize filter controls
       // Use setTimeout to avoid interfering with initial render
       if (columns.length > 0) {
-        console.log('[UIManager] Auto-initializing filter controls');
+        // console.log('[UIManager] Auto-initializing filter controls');
         setTimeout(() => onFilterChange(), 0);
       }
     }
@@ -91,25 +102,25 @@ export class UIManager {
   renderPointInfo(data: Record<string, any> | null): void {
     const navbar = document.getElementById('point-data');
     if (!navbar) {
-      console.warn('[UIManager] point-data element not found');
+      // console.warn('[UIManager] point-data element not found');
       return;
     }
 
     if (data === null) {
-      console.log('[UIManager] Clearing point info');
+      // console.log('[UIManager] Clearing point info');
       // Use Mithril to clear to maintain consistency
       m.render(navbar, null);
     } else {
-      console.log('[UIManager] Rendering point info:', Object.keys(data));
-      console.log('[UIManager] Point data values:', data);
-      console.log('[UIManager] navbar element:', navbar, 'innerHTML before:', navbar.innerHTML);
+      // console.log('[UIManager] Rendering point info:', Object.keys(data));
+      // console.log('[UIManager] Point data values:', data);
+      // console.log('[UIManager] navbar element:', navbar, 'innerHTML before:', navbar.innerHTML);
       
       // Force a fresh render by clearing first
       m.render(navbar, null);
       // Then render the new content
       m.render(navbar, m(PointInfo, { data }));
       
-      console.log('[UIManager] navbar innerHTML after:', navbar.innerHTML);
+      // console.log('[UIManager] navbar innerHTML after:', navbar.innerHTML);
     }
   }
 
@@ -162,7 +173,7 @@ export class UIManager {
     onColorChange: (field: string) => void,
     onFilterChange: () => void
   ): void {
-    console.log('[UIManager] renderAllControls called');
+    // console.log('[UIManager] renderAllControls called');
     this.renderColorSelector(columns, onColorChange);
     this.renderFilterSelector(columns, onFilterChange);
   }

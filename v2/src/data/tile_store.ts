@@ -94,27 +94,27 @@ export class TileStore {
   }
   
   public update(viewport: BBox) {
-      console.log('TileStore update viewport:', viewport);
+      // console.log('TileStore update viewport:', viewport);
       this.traverse(this.rootKey, viewport);
   }
 
   private traverse(key: string, viewport: BBox) {
       if (!this.tiles.has(key)) {
-          console.log(`Traverse: Requesting ${key}`);
+          // console.log(`Traverse: Requesting ${key}`);
           this.loadTile(key);
           return;
       }
 
       const tile = this.tiles.get(key)!;
       if (!tile.isLoaded) {
-          console.log(`Traverse: ${key} waiting for load`);
+          // console.log(`Traverse: ${key} waiting for load`);
           return;
       }
 
       // If tile is not visible, don't process children?
       // But we are traversing from root. If root intersects, we check children.
       if (!this.intersects(tile.bbox, viewport)) {
-          console.log(`Traverse: ${key} not visible`);
+          // console.log(`Traverse: ${key} not visible`);
           return;
       }
 

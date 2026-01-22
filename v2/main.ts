@@ -11,7 +11,6 @@ let hasActiveSelection = false;
 let selectionDataBounds: { xMin: number; xMax: number; yMin: number; yMax: number } | null = null;
 let currentSelectionData: any[] | null = null;
 let lastColumn: string | null = null;
-let lastAction: string | null = null;
 let lastMouseX = 0;
 let lastMouseY = 0;
 
@@ -26,36 +25,6 @@ async function init() {
         if (!container) {
             console.error('Container not found!');
             return;
-        }
-        
-        // Check for floating controls
-        const floatingControls = document.getElementById('floating-controls');
-        console.log('[DEBUG] Floating controls element:', floatingControls);
-        if (floatingControls) {
-            const computedStyle = window.getComputedStyle(floatingControls);
-            const rect = floatingControls.getBoundingClientRect();
-            console.log('[DEBUG] Floating controls display:', computedStyle.display);
-            console.log('[DEBUG] Floating controls visibility:', computedStyle.visibility);
-            console.log('[DEBUG] Floating controls z-index:', computedStyle.zIndex);
-            console.log('[DEBUG] Floating controls position:', computedStyle.position);
-            console.log('[DEBUG] Floating controls top:', computedStyle.top);
-            console.log('[DEBUG] Floating controls right:', computedStyle.right);
-            console.log('[DEBUG] Floating controls bounding rect:', rect);
-            console.log('[DEBUG] Floating controls children:', floatingControls.children.length);
-            
-            // Check each button
-            Array.from(floatingControls.children).forEach((child, i) => {
-                const childStyle = window.getComputedStyle(child);
-                console.log(`[DEBUG] Button ${i} (${child.id}):`, {
-                    display: childStyle.display,
-                    visibility: childStyle.visibility,
-                    opacity: childStyle.opacity
-                });
-            });
-            
-            console.log('[DEBUG] Window inner width:', window.innerWidth);
-            console.log('[DEBUG] Window inner height:', window.innerHeight);
-            console.log('[DEBUG] Document body width:', document.body.clientWidth);
         }
         
         console.log('Container found, initializing plot...');
@@ -86,10 +55,10 @@ async function init() {
                 const scale = plot.colorManager.getCurrentScale();
                 // Always update legend - clear if no scale, render if scale exists
                 if (scale === null) {
-                    console.log('Clearing legend because scale is null');
+                    // console.log('Clearing legend because scale is null');
                     legend.clear();
                 } else {
-                    console.log('Rendering legend with scale:', scale);
+                    // console.log('Rendering legend with scale:', scale);
                     legend.render(scale);
                 }
             };
@@ -134,8 +103,9 @@ async function init() {
                     if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                         // If there's a chart displayed, reload it
                         const chartContainer = document.getElementById('chart-container');
-                        if (chartContainer && chartContainer.children.length > 0 && lastColumn && lastAction === 'chart') {
-                            setTimeout(() => renderChart(lastColumn!), 100);
+                        const columnSelector = document.getElementById('column-selector') as HTMLSelectElement;
+                        if (chartContainer && chartContainer.children.length > 0 && columnSelector && columnSelector.value) {
+                            setTimeout(() => renderChart(columnSelector.value), 100);
                         }
                     }
                 }
@@ -197,6 +167,10 @@ function setupKeyboardBindings(plot: any) {
                 e.preventDefault();
                 zoomAtPoint(plot, lastMouseX, lastMouseY, 1 / zoomFactor);
                 break;
+            case 'c': // Recenter to full extent
+                e.preventDefault();
+                recenterToFullExtent(plot);
+                break;
             case 'l': // Toggle selection mode
                 e.preventDefault();
                 selectionModeActive = !selectionModeActive;
@@ -217,6 +191,64 @@ function setupKeyboardBindings(plot: any) {
                 break;
         }
     });
+}
+
+function recenterToFullExtent(plot: any) {
+    // Get all tiles to calculate the full extent
+    const tileStore = plot.getTileStore();
+    const allTiles = tileStore.getAllTiles();
+    
+    if (allTiles.length === 0) return;
+    
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    
+    // Calculate extent from all loaded tiles
+    for (const tile of allTiles) {
+        if (!tile.data) continue;
+        
+        const xCol = tile.data.getChild('x');
+        const yCol = tile.data.getChild('y');
+        
+        if (!xCol || !yCol) continue;
+        
+        const numRows = tile.data.numRows;
+        for (let i = 0; i < numRows; i++) {
+            const x = xCol.get(i);
+            const y = yCol.get(i);
+            
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+    }
+    
+    // If we found valid bounds, fit to them
+    if (isFinite(minX) && isFinite(maxX) && isFinite(minY) && isFinite(maxY)) {
+        const dataW = maxX - minX;
+        const dataH = maxY - minY;
+        
+        if (dataW <= 0 || dataH <= 0) return;
+
+        const canvas = document.getElementById('container')?.querySelector('canvas');
+        if (!canvas) return;
+        
+        const { width, height } = canvas.getBoundingClientRect();
+        const minDimension = Math.min(width, height);
+        
+        const kx = width / (dataW * minDimension);
+        const ky = height / (dataH * minDimension);
+        const k = Math.min(kx, ky) * 0.9;
+
+        const cx = minX + dataW / 2;
+        const cy = minY + dataH / 2;
+        
+        const x = width / 2 - cx * k * minDimension;
+        const y = height / 2 - cy * k * minDimension;
+        
+        plot.getController().setTransform(k, x, y);
+    }
 }
 
 function zoomAtPoint(plot: any, mouseX: number, mouseY: number, scaleFactor: number) {
@@ -343,14 +375,14 @@ function setupRegionSelection(plot: any) {
         hasActiveSelection = true;
         setTimeout(() => { hasDragged = false; }, 100);
 
-        console.log('=== SELECTION DEBUG ===');
-        console.log('Screen coordinates:', { startX, startY, endX, endY });
+        // console.log('=== SELECTION DEBUG ===');
+        // console.log('Screen coordinates:', { startX, startY, endX, endY });
         
         // Convert screen coordinates to data coordinates
         const topLeft = plot.screenToData(Math.min(startX, endX), Math.min(startY, endY));
         const bottomRight = plot.screenToData(Math.max(startX, endX), Math.max(startY, endY));
         
-        console.log('Data coordinates:', { topLeft, bottomRight });
+        // console.log('Data coordinates:', { topLeft, bottomRight });
         
         const xMin = Math.min(topLeft.x, bottomRight.x);
         const xMax = Math.max(topLeft.x, bottomRight.x);
@@ -359,8 +391,8 @@ function setupRegionSelection(plot: any) {
 
         selectionDataBounds = { xMin, xMax, yMin, yMax };
         
-        console.log('Selection bounds:', selectionDataBounds);
-        console.log('Current transform:', plot.getTransform());
+        // console.log('Selection bounds:', selectionDataBounds);
+        // console.log('Current transform:', plot.getTransform());
         
         // Get selected points from tiles
         await extractSelectionData(plot, xMin, xMax, yMin, yMax);
@@ -382,12 +414,12 @@ async function extractSelectionData(plot: any, xMin: number, xMax: number, yMin:
         const allTiles = tileStore.getAllTiles();
         const selectedPoints: any[] = [];
         
-        console.log(`Extracting data from ${allTiles.length} tiles`);
-        console.log(`Selection bounds: x=[${xMin}, ${xMax}], y=[${yMin}, ${yMax}]`);
+        // console.log(`Extracting data from ${allTiles.length} tiles`);
+        // console.log(`Selection bounds: x=[${xMin}, ${xMax}], y=[${yMin}, ${yMax}]`);
         
         for (const tile of allTiles) {
             if (!tile.data) {
-                console.log(`Tile ${tile.key} has no data`);
+                // console.log(`Tile ${tile.key} has no data`);
                 continue;
             }
             
@@ -395,21 +427,21 @@ async function extractSelectionData(plot: any, xMin: number, xMax: number, yMin:
             const yCol = tile.data.getChild('y');
             
             if (!xCol || !yCol) {
-                console.log(`Tile ${tile.key} missing x or y column`);
+                // console.log(`Tile ${tile.key} missing x or y column`);
                 continue;
             }
             
             const numRows = tile.data.numRows;
-            console.log(`Tile ${tile.key} has ${numRows} rows`);
+            // console.log(`Tile ${tile.key} has ${numRows} rows`);
             
             // Sample first few points to see their coordinates
-            if (numRows > 0) {
-                const sampleSize = Math.min(3, numRows);
-                console.log(`Sample points from tile ${tile.key}:`);
-                for (let i = 0; i < sampleSize; i++) {
-                    console.log(`  Point ${i}: x=${xCol.get(i)}, y=${yCol.get(i)}`);
-                }
-            }
+            // if (numRows > 0) {
+            //     const sampleSize = Math.min(3, numRows);
+            //     console.log(`Sample points from tile ${tile.key}:`);
+            //     for (let i = 0; i < sampleSize; i++) {
+            //         console.log(`  Point ${i}: x=${xCol.get(i)}, y=${yCol.get(i)}`);
+            //     }
+            // }
             
             let tileMatches = 0;
             for (let i = 0; i < numRows; i++) {
@@ -425,11 +457,11 @@ async function extractSelectionData(plot: any, xMin: number, xMax: number, yMin:
                     }
                 }
             }
-            console.log(`Tile ${tile.key}: ${tileMatches} points matched selection`);
+            // console.log(`Tile ${tile.key}: ${tileMatches} points matched selection`);
         }
         
         currentSelectionData = selectedPoints;
-        console.log(`Selected ${selectedPoints.length} points`);
+        // console.log(`Selected ${selectedPoints.length} points`);
         
         // Update selection count
         const selectionCount = document.getElementById('selection-count');
@@ -445,13 +477,23 @@ function setupActionPanel(plot: any) {
     const actionPanel = document.getElementById('action-panel');
     const closeButton = actionPanel?.querySelector('.panel-close-button');
     const collapseButton = actionPanel?.querySelector('.panel-collapse-button');
-    const executeButton = document.getElementById('execute-button');
+    const exportButton = document.getElementById('export-csv-button');
     const columnSelector = document.getElementById('column-selector') as HTMLSelectElement;
-    const actionSelector = document.getElementById('action-selector') as HTMLSelectElement;
     
     if (closeButton) {
         closeButton.addEventListener('click', () => {
             clearSelection();
+            // Toggle off selection mode when closing the panel
+            selectionModeActive = false;
+            const selectModeToggle = document.getElementById('select-mode-toggle');
+            const canvas = document.getElementById('container')?.querySelector('canvas');
+            
+            if (selectModeToggle) {
+                selectModeToggle.classList.remove('active');
+            }
+            if (canvas) {
+                canvas.style.cursor = 'default';
+            }
         });
     }
     
@@ -462,9 +504,17 @@ function setupActionPanel(plot: any) {
         });
     }
     
-    if (executeButton) {
-        executeButton.addEventListener('click', () => {
-            executeAction(columnSelector?.value, actionSelector?.value);
+    if (exportButton) {
+        exportButton.addEventListener('click', () => {
+            exportToCSV(columnSelector?.value || '');
+        });
+    }
+    
+    if (columnSelector) {
+        columnSelector.addEventListener('change', () => {
+            if (currentSelectionData && currentSelectionData.length > 0) {
+                renderChart(columnSelector.value);
+            }
         });
     }
 
@@ -505,17 +555,16 @@ function setupActionPanel(plot: any) {
 function showActionPanel() {
     const actionPanel = document.getElementById('action-panel');
     const columnSelector = document.getElementById('column-selector') as HTMLSelectElement;
-    const actionSelector = document.getElementById('action-selector') as HTMLSelectElement;
     
-    if (!actionPanel || !columnSelector || !actionSelector) {
-        console.error('Action panel or selectors not found');
+    if (!actionPanel || !columnSelector) {
+        console.log('Action panel or selectors not found');
         return;
     }
     
     // Populate column selector with available fields
     if (currentSelectionData && currentSelectionData.length > 0) {
         const fields = Object.keys(currentSelectionData[0]).filter(k => k !== 'x' && k !== 'y');
-        console.log('Available fields:', fields);
+        // console.log('Available fields:', fields);
         columnSelector.innerHTML = '';
         
         if (fields.length === 0) {
@@ -524,27 +573,49 @@ function showActionPanel() {
             option.textContent = 'No columns available';
             columnSelector.appendChild(option);
         } else {
+            // Determine default column using centralized logic
+            let defaultField = lastColumn && fields.includes(lastColumn) ? lastColumn : null;
+            
+            // If no last column, use the centralized default selection from DataLoader
+            if (!defaultField) {
+                // @ts-ignore
+                const plot = window.plot;
+                if (plot && plot.dataLoader) {
+                    // Build Column objects from fields for the heuristic
+                    const fieldColumns = fields.map(f => {
+                        const sampleValue = currentSelectionData![0][f];
+                        const isNumeric = typeof sampleValue === 'number';
+                        // Only mark as categorical if it's a string/non-numeric AND has reasonable cardinality
+                        const uniqueValues = new Set(currentSelectionData!.map(d => d[f]));
+                        const isCategorical = !isNumeric && uniqueValues.size > 1 && uniqueValues.size < currentSelectionData!.length * 0.5;
+                        return {
+                            name: f,
+                            numeric: isNumeric,
+                            categorical: isCategorical
+                        };
+                    });
+                    
+                    // Use the centralized selectDefaultColumn method
+                    defaultField = plot.dataLoader.selectDefaultColumn(fieldColumns);
+                }
+            }
+            
+            // Fallback to first field if still no default
+            if (!defaultField) {
+                defaultField = fields[0];
+            }
+            
             fields.forEach(field => {
                 const option = document.createElement('option');
                 option.value = field;
                 option.textContent = field;
-                // Restore last used column if available
-                if (lastColumn && field === lastColumn) {
-                    option.selected = true;
-                }
+                option.selected = field === defaultField;
                 columnSelector.appendChild(option);
             });
             
-            // If no last column or it doesn't exist, select first field
-            if (!lastColumn || !fields.includes(lastColumn)) {
-                columnSelector.value = fields[0];
-            }
+            columnSelector.value = defaultField;
         }
         
-        // Restore last used action if available
-        if (lastAction) {
-            actionSelector.value = lastAction;
-        }
     } else {
         console.warn('No selection data available');
         columnSelector.innerHTML = '<option>No data selected</option>';
@@ -553,9 +624,9 @@ function showActionPanel() {
     actionPanel.classList.add('open');
     actionPanel.classList.remove('collapsed');
     
-    // Auto-execute if last action was chart
-    if (lastAction === 'chart' && currentSelectionData && currentSelectionData.length > 0) {
-        setTimeout(() => executeAction(columnSelector.value, actionSelector.value), 100);
+    // Auto-render chart with the selected column
+    if (currentSelectionData && currentSelectionData.length > 0 && columnSelector.value) {
+        setTimeout(() => renderChart(columnSelector.value), 100);
     }
 }
 
@@ -643,24 +714,10 @@ function setupRectangleTracking(plot: any) {
     };
 }
 
-async function executeAction(column: string, action: string) {
-    if (!currentSelectionData || currentSelectionData.length === 0) {
-        alert('No data selected');
-        return;
-    }
-    
-    // Save last used column and action
-    lastColumn = column;
-    lastAction = action;
-    
-    if (action === 'chart') {
-        renderChart(column);
-    } else if (action === 'export') {
-        exportToCSV(column);
-    }
-}
-
 async function renderChart(column: string) {
+    // Save last used column
+    lastColumn = column;
+    
     const chartContainer = document.getElementById('chart-container');
     if (!chartContainer || !currentSelectionData) return;
     

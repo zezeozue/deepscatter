@@ -231,6 +231,18 @@ body, html {
   opacity: 1;
 }
 
+.help-icon-btn {
+  font-size: 14px;
+  font-weight: bold;
+  font-family: serif;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  padding: 0;
+  line-height: 1;
+}
+
 /* Hamburger button styling */
 .hamburger-btn {
   position: fixed;
@@ -510,7 +522,7 @@ body.dark-mode .modal-content button:hover {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 30vh;
+  height: 45vh;
   min-height: 150px;
   max-height: 80vh;
   background-color: #fefefe;
@@ -727,4 +739,71 @@ body.dark-mode #vg-tooltip-element .key {
 
 body.dark-mode #vg-tooltip-element .value {
   color: #fff !important;
+}
+
+/* Help Tooltip */
+.help-tooltip {
+  display: none;
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  min-width: 250px;
+}
+
+.help-tooltip.show {
+  display: block;
+}
+
+.help-tooltip-content h4 {
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.shortcut-row kbd {
+  background: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.shortcut-row span {
+  color: #666;
+}
+
+#app-container.dark-mode .help-tooltip {
+  background: #2a2a2a;
+  border-color: #555;
+}
+
+#app-container.dark-mode .help-tooltip-content h4 {
+  border-bottom-color: #555;
+  color: #fff;
+}
+
+#app-container.dark-mode .shortcut-row kbd {
+  background: #444;
+  border-color: #666;
+  color: #fff;
+}
+
+#app-container.dark-mode .shortcut-row span {
+  color: #aaa;
 }
