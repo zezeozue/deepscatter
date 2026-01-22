@@ -23,6 +23,21 @@ const NumericFilter: m.Component<FilterControlsAttrs> = {
     let minVal: number | null = null;
     let maxVal: number | null = null;
     
+    const applyFilter = () => {
+      if (minVal !== null || maxVal !== null) {
+        filterManager.setNumericFilter(column.name, minVal, maxVal);
+      } else {
+        filterManager.removeFilter(column.name);
+      }
+      onApply();
+    };
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        applyFilter();
+      }
+    };
+    
     return m('.filter-numeric', [
       m('.input-group', {
         style: 'display: flex; gap: 5px; margin-top: 10px;'
@@ -34,7 +49,8 @@ const NumericFilter: m.Component<FilterControlsAttrs> = {
           oninput: (e: Event) => {
             const val = (e.target as HTMLInputElement).value;
             minVal = val ? parseFloat(val) : null;
-          }
+          },
+          onkeydown: handleKeyDown
         }),
         m('input[type=number]', {
           placeholder: `Max (${max.toFixed(2)})`,
@@ -43,16 +59,10 @@ const NumericFilter: m.Component<FilterControlsAttrs> = {
           oninput: (e: Event) => {
             const val = (e.target as HTMLInputElement).value;
             maxVal = val ? parseFloat(val) : null;
-          }
+          },
+          onkeydown: handleKeyDown
         })
-      ]),
-      m('button.apply-btn', {
-        style: 'margin-top: 5px;',
-        onclick: () => {
-          filterManager.setNumericFilter(column.name, minVal, maxVal);
-          onApply();
-        }
-      }, 'Apply')
+      ])
     ]);
   }
 };
@@ -92,21 +102,30 @@ const StringFilter: m.Component<FilterControlsAttrs> = {
   view({ attrs }) {
     const { column, filterManager, onApply } = attrs;
     
+    let currentValue = '';
+    
+    const applyFilter = () => {
+      if (currentValue && currentValue.trim()) {
+        filterManager.setStringFilter(column.name, currentValue);
+      } else {
+        filterManager.removeFilter(column.name);
+      }
+      onApply();
+    };
+    
     return m('.filter-string', [
       m('label.filter-label', {
         style: 'display: block; margin-top: 10px; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem;'
       }, 'Search (substring):'),
       m('input[type=text]', {
-        placeholder: 'Enter text to filter...',
+        placeholder: 'Enter text to filter... (press Enter)',
         style: 'width: 100%; padding: 0.6rem; margin-bottom: 10px; box-sizing: border-box;',
         oninput: (e: Event) => {
-          const value = (e.target as HTMLInputElement).value;
-          if (value) {
-            filterManager.setStringFilter(column.name, value);
-            onApply();
-          } else {
-            filterManager.removeFilter(column.name);
-            onApply();
+          currentValue = (e.target as HTMLInputElement).value;
+        },
+        onkeydown: (e: KeyboardEvent) => {
+          if (e.key === 'Enter') {
+            applyFilter();
           }
         }
       })

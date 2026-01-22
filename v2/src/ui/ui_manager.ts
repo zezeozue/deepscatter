@@ -1,5 +1,5 @@
 import m from 'mithril';
-import { ColorSelector, FilterSelector, PointInfo, FilterControls } from './components';
+import { ColorSelector, FilterSelector, PointInfo, FilterControls, FilterChips } from './components';
 import { Tile } from '../data/tile';
 import { FilterManager } from '../aesthetics/filter_manager';
 
@@ -62,7 +62,11 @@ export class UIManager {
   /**
    * Render filter selector dropdown
    */
-  renderFilterSelector(columns: Column[], onFilterChange: () => void): void {
+  renderFilterSelector(
+    columns: Column[],
+    onFilterChange: () => void,
+    activeFilters?: Set<string>
+  ): void {
     // console.log('[UIManager] Rendering filter selector with', columns.length, 'columns');
     const filterBy = document.getElementById('filter-by-selector');
     if (!filterBy) {
@@ -79,7 +83,8 @@ export class UIManager {
     m.render(tempDiv, m(FilterSelector, {
       columns,
       onChange: onFilterChange,
-      selectedDefault: this.selectedDefault
+      selectedDefault: this.selectedDefault,
+      activeFilters
     }));
     
     const newSelect = tempDiv.firstChild;
@@ -171,11 +176,28 @@ export class UIManager {
   renderAllControls(
     columns: Column[],
     onColorChange: (field: string) => void,
-    onFilterChange: () => void
+    onFilterChange: () => void,
+    activeFilters?: Set<string>
   ): void {
     // console.log('[UIManager] renderAllControls called');
     this.renderColorSelector(columns, onColorChange);
-    this.renderFilterSelector(columns, onFilterChange);
+    this.renderFilterSelector(columns, onFilterChange, activeFilters);
+  }
+
+  /**
+   * Render filter chips
+   */
+  renderFilterChips(
+    filterManager: FilterManager,
+    onRemove: (field: string) => void
+  ): void {
+    const chipsContainer = document.getElementById('filter-chips-container');
+    if (!chipsContainer) return;
+
+    m.render(chipsContainer, m(FilterChips, {
+      filters: filterManager.getFilters(),
+      onRemove
+    }));
   }
 
   /**

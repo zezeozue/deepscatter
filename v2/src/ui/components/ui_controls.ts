@@ -16,6 +16,7 @@ interface FilterSelectorAttrs {
   columns: Column[];
   onChange: () => void;
   selectedDefault: string | null;
+  activeFilters?: Set<string>;
 }
 
 export const ColorSelector: m.Component<ColorSelectorAttrs> = {
@@ -40,17 +41,20 @@ export const ColorSelector: m.Component<ColorSelectorAttrs> = {
 
 export const FilterSelector: m.Component<FilterSelectorAttrs> = {
   view({ attrs }) {
-    const { columns, onChange, selectedDefault } = attrs;
+    const { columns, onChange, selectedDefault, activeFilters } = attrs;
     
     return m('select#filter-by-selector', {
       onchange: () => onChange()
     },
-      columns.map(col =>
-        m('option', {
+      columns.map(col => {
+        const hasFilter = activeFilters?.has(col.name);
+        const displayName = hasFilter ? `${col.name} ✓` : col.name;
+        
+        return m('option', {
           value: col.name,
           selected: col.name === selectedDefault
-        }, col.name)
-      )
+        }, displayName);
+      })
     );
   }
 };

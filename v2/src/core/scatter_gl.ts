@@ -264,10 +264,15 @@ export class ScatterGL {
     // Use centralized default column selection from DataLoader
     const selectedDefault = this.dataLoader.selectDefaultColumn(this.columns);
     this.uiManager.setSelectedDefault(selectedDefault);
+    
+    // Get active filter fields
+    const activeFilters = new Set(this.filterManager.getFilters().keys());
+    
     this.uiManager.renderAllControls(
       this.columns,
       (field) => this.applyColorEncoding(field),
-      () => this.updateFilterControls()
+      () => this.updateFilterControls(),
+      activeFilters
     );
   }
 
@@ -296,6 +301,12 @@ export class ScatterGL {
   // ============================================================================
 
   private updateFilterControls(): void {
+    // Render filter chips
+    this.uiManager.renderFilterChips(
+      this.filterManager,
+      (field) => this.removeFilter(field)
+    );
+    
     this.uiManager.updateFilterControls(
       this.columns,
       this.tileStore.getTiles(),
@@ -304,9 +315,40 @@ export class ScatterGL {
     );
   }
 
+  private removeFilter(field: string): void {
+    this.filterManager.removeFilter(field);
+    
+    // If the removed filter is currently selected in the dropdown, clear the controls
+    const filterSelector = document.getElementById('filter-by-selector') as HTMLSelectElement;
+    if (filterSelector && filterSelector.value === field) {
+      const filterControls = document.getElementById('filter-controls');
+      if (filterControls) {
+        filterControls.innerHTML = '';
+      }
+    }
+    
+    this.applyFilters();
+    // Re-render chips and controls to keep everything in sync
+    this.updateFilterControls();
+    // Also re-render the filter selector to update the checkmarks
+    const activeFilters = new Set(this.filterManager.getFilters().keys());
+    this.uiManager.renderFilterSelector(
+      this.columns,
+      () => this.updateFilterControls(),
+      activeFilters
+    );
+  }
+
   private applyFilters(): void {
     this.specVersion++;
     this.render();
+    // Update the filter selector to show current active filters
+    const activeFilters = new Set(this.filterManager.getFilters().keys());
+    this.uiManager.renderFilterSelector(
+      this.columns,
+      () => this.updateFilterControls(),
+      activeFilters
+    );
   }
 
   // ============================================================================
