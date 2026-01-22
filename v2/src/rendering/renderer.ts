@@ -25,7 +25,7 @@ export class Renderer {
   // Picking framebuffer
   private pickingFramebuffer: WebGLFramebuffer | null = null;
   private pickingTexture: WebGLTexture | null = null;
-  private _pickingTextureWidth = 0;
+  // private _pickingTextureWidth = 0;
   private pickingTextureHeight = 0;
 
   // Highlight state

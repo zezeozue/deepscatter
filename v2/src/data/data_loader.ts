@@ -90,17 +90,30 @@ export class DataLoader {
     
     const extent = this.calculateExtentFromArrays(xData, yData);
     
-    const x = makeVector(xData);
-    const y = makeVector(yData);
+    // Normalize coordinates to [0, 1] range for better float precision
+    const xRange = extent.maxX - extent.minX;
+    const yRange = extent.maxY - extent.minY;
+    
+    const normalizedX = new Float32Array(xData.length);
+    const normalizedY = new Float32Array(yData.length);
+    
+    for (let i = 0; i < xData.length; i++) {
+      normalizedX[i] = xRange > 0 ? (xData[i] - extent.minX) / xRange : 0;
+      // Normalize and invert y-axis
+      normalizedY[i] = yRange > 0 ? 1.0 - ((yData[i] - extent.minY) / yRange) : 0;
+    }
+    
+    const x = makeVector(normalizedX);
+    const y = makeVector(normalizedY);
     
     const otherCols = this.processOtherColumns(data, xField, yField);
     
     this.columnMetadata.set('x', { min: extent.minX, max: extent.maxX });
     this.columnMetadata.set('y', { min: extent.minY, max: extent.maxY });
     
-    return { 
-      table: new Table({ x, y, ...otherCols }), 
-      extent 
+    return {
+      table: new Table({ x, y, ...otherCols }),
+      extent
     };
   }
 
@@ -216,15 +229,28 @@ export class DataLoader {
     const root = tileStore.getRoot();
     if (root?.data) {
       const columns = this.extractColumns(root.data.schema);
-      const xCol = root.data.getChild('x');
-      const yCol = root.data.getChild('y');
       
-      if (xCol && yCol) {
-        const extent = this.calculateExtent(xCol, yCol, root.data.numRows);
-        return { columns, extent };
+      // Data from tiles is already normalized to [0, 1]
+      // Use metadata for original extent if available, otherwise use normalized extent
+      const xMeta = this.columnMetadata.get('x');
+      const yMeta = this.columnMetadata.get('y');
+      
+      let extent: DataExtent;
+      if (xMeta?.min !== undefined && xMeta?.max !== undefined &&
+          yMeta?.min !== undefined && yMeta?.max !== undefined) {
+        // Use original extent from config metadata
+        extent = {
+          minX: xMeta.min,
+          maxX: xMeta.max,
+          minY: yMeta.min,
+          maxY: yMeta.max
+        };
+      } else {
+        // Fallback to normalized extent [0, 1]
+        extent = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
       }
       
-      return { columns, extent: null };
+      return { columns, extent };
     }
     
     return { columns: [], extent: null };
@@ -242,9 +268,10 @@ export class DataLoader {
     const { table, extent } = this.createTableFromData(data, xField, yField);
     const columns = this.extractColumns(table.schema);
     
+    // Data is normalized to [0, 1], so use normalized bbox
     tileStore.fromTable(table, {
-      x: [extent.minX, extent.maxX],
-      y: [extent.minY, extent.maxY]
+      x: [0, 1],
+      y: [0, 1]
     });
     
     return { columns, extent };

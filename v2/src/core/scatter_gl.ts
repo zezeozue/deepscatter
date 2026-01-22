@@ -36,7 +36,7 @@ export class ScatterGL {
   private baseK: number = 1.0;
   
   // --- Render State ---
-  private _spec: RenderSpec = { x: 'x', y: 'y' };
+  // private _spec: RenderSpec = { x: 'x', y: 'y' };
   private specVersion: number = 0;
   private currentColorScale: ColorScale | null = null;
   
@@ -46,6 +46,7 @@ export class ScatterGL {
   
   // --- Data State ---
   private columns: Column[] = [];
+  private dataExtent: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -209,8 +210,21 @@ export class ScatterGL {
       return;
     }
 
+    // Transform normalized coordinates back to original values for display
+    const data = row.toJSON();
+    if (this.dataExtent) {
+      const xRange = this.dataExtent.maxX - this.dataExtent.minX;
+      const yRange = this.dataExtent.maxY - this.dataExtent.minY;
+      
+      // Reverse normalization: original = normalized * range + min
+      // For y, also reverse the inversion: normalized_y = 1 - ((original - min) / range)
+      // So: original_y = min + (1 - normalized_y) * range
+      data.x = data.x * xRange + this.dataExtent.minX;
+      data.y = this.dataExtent.minY + (1 - data.y) * yRange;
+    }
+
     // console.log('[ScatterGL] Updating point info with data');
-    this.uiManager.renderPointInfo(row.toJSON());
+    this.uiManager.renderPointInfo(data);
   }
 
   // ============================================================================
@@ -221,14 +235,11 @@ export class ScatterGL {
     const { columns, extent } = await this.dataLoader.loadFromUrl(url, this.tileStore);
     
     this.columns = columns;
+    this.dataExtent = extent;
     this.renderUIControls();
     
-    if (extent) {
-      this.fitToExtent(extent.minX, extent.maxX, extent.minY, extent.maxY);
-    } else {
-      this.updateViewport();
-      this.render();
-    }
+    // Data is normalized to [0, 1], so fit to normalized extent
+    this.fitToExtent(0, 1, 0, 1);
   }
 
   public loadData(data: any[], xField: string, yField: string, defaultColumn?: string | null): void {
@@ -238,6 +249,7 @@ export class ScatterGL {
     const { columns, extent } = this.dataLoader.loadFromArray(data, xField, yField, this.tileStore);
     
     this.columns = columns;
+    this.dataExtent = extent;
     
     // Set the user-specified default column if provided and valid
     if (defaultColumn) {
@@ -252,7 +264,8 @@ export class ScatterGL {
     }
     
     this.renderUIControls();
-    this.fitToExtent(extent.minX, extent.maxX, extent.minY, extent.maxY);
+    // Data is normalized to [0, 1], so fit to normalized extent
+    this.fitToExtent(0, 1, 0, 1);
   }
 
   // ============================================================================

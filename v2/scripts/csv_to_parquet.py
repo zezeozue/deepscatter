@@ -8,8 +8,8 @@ import json
 import pyarrow.feather as feather
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description='Convert a CSV file to a Parquet file, generate a config, and create tiles.')
-parser.add_argument('csv_path', type=str, help='Path to the CSV file.')
+parser = argparse.ArgumentParser(description='Convert a CSV/TSV/JSON file to a Parquet file, generate a config, and create tiles.')
+parser.add_argument('file_path', type=str, help='Path to the CSV, TSV, or JSON file.')
 parser.add_argument('--x', type=str, required=True, help='The column to use for the x-axis.')
 parser.add_argument('--y', type=str, required=True, help='The column to use for the y-axis.')
 parser.add_argument('--tile_size', type=int, default=10000, help='The number of rows per tile.')
@@ -17,9 +17,17 @@ parser.add_argument('--categorical', type=str, help='Comma-separated list of cat
 parser.add_argument('--default_column', type=str, help='Default column for color/filter selectors (must be numeric or categorical).')
 args = parser.parse_args()
 
-# Read CSV and infer schema
-csv_path = os.path.expanduser(args.csv_path)
-df = pd.read_csv(csv_path)
+# Read file and infer schema based on extension
+file_path = os.path.expanduser(args.file_path)
+file_ext = os.path.splitext(file_path)[1].lower()
+
+if file_ext == '.json':
+    df = pd.read_json(file_path)
+elif file_ext == '.tsv':
+    df = pd.read_csv(file_path, sep='\t')
+else:
+    # Default to CSV
+    df = pd.read_csv(file_path)
 
 # Rename columns for x and y BEFORE generating schema
 df = df.rename(columns={args.x: 'x', args.y: 'y'})
@@ -70,18 +78,33 @@ for field in schema:
 
 print("Generated column configuration with auto-detected types, min/max values, and categorical metadata")
 
-# Invert y-axis
+# Normalize x and y to [0, 1] range for better float precision
+x_min = df['x'].min()
+x_max = df['x'].max()
 y_min = df['y'].min()
 y_max = df['y'].max()
-df['y'] = y_max - (df['y'] - y_min)
 
-print("Inverted y-axis")
+x_range = x_max - x_min
+y_range = y_max - y_min
+
+if x_range > 0:
+    df['x'] = (df['x'] - x_min) / x_range
+else:
+    df['x'] = 0
+
+if y_range > 0:
+    # Normalize and invert y-axis
+    df['y'] = 1.0 - ((df['y'] - y_min) / y_range)
+else:
+    df['y'] = 0
+
+print(f"Normalized coordinates: x [{x_min}, {x_max}] -> [0, 1], y [{y_min}, {y_max}] -> [0, 1] (inverted)")
 
 # Convert to Arrow Table and write to Parquet
 table = pa.Table.from_pandas(df)
 pq.write_table(table, 'f1_data.parquet')
 
-print(f"Successfully converted data from '{args.csv_path}' to f1_data.parquet")
+print(f"Successfully converted data from '{args.file_path}' to f1_data.parquet")
 
 # Execute the quadfeather command
 quadfeather_command = f".venv/bin/quadfeather --files f1_data.parquet --tile_size {args.tile_size} --destination tiles"

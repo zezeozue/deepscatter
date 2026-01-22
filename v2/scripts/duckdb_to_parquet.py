@@ -69,11 +69,26 @@ if args.where:
 
 result = con.execute(query).fetch_arrow_table()
 
-# Invert y-axis
+# Normalize x and y to [0, 1] range for better float precision
 df = result.to_pandas()
+x_min = df['x'].min()
+x_max = df['x'].max()
 y_min = df['y'].min()
 y_max = df['y'].max()
-df['y'] = y_max - (df['y'] - y_min)
+
+x_range = x_max - x_min
+y_range = y_max - y_min
+
+if x_range > 0:
+    df['x'] = (df['x'] - x_min) / x_range
+else:
+    df['x'] = 0
+
+if y_range > 0:
+    # Normalize and invert y-axis
+    df['y'] = 1.0 - ((df['y'] - y_min) / y_range)
+else:
+    df['y'] = 0
 
 # Calculate min/max for numeric columns and categories for categorical columns
 for col_config in config_columns:
@@ -95,7 +110,8 @@ for col_config in config_columns:
 
 result = pa.Table.from_pandas(df)
 
-print("Inverted y-axis, calculated min/max for numeric columns, and indexed categorical columns")
+print(f"Normalized coordinates: x [{x_min}, {x_max}] -> [0, 1], y [{y_min}, {y_max}] -> [0, 1] (inverted)")
+print("Calculated min/max for numeric columns and indexed categorical columns")
 
 # Write the result to a Parquet file
 pq.write_table(result, 'f1_data.parquet')
