@@ -81,19 +81,24 @@ body, html {
 }
 
 .nav-btn {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  font-size: 1.2rem;
+  font-size: 1rem;
   cursor: pointer;
   background: none;
-  border: 2px solid rgba(0,0,0,0.2);
+  border: 1.5px solid rgba(0,0,0,0.2);
   border-radius: 50%;
   color: var(--text-color);
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.nav-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .nav-btn:hover {

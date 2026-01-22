@@ -34,7 +34,9 @@ export class DataLoader {
    */
   async loadConfigMetadata(url: string): Promise<void> {
     try {
-      const response = await fetch(`${url}/config.json`);
+      // Remove trailing slash if present to avoid double slashes
+      const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+      const response = await fetch(`${cleanUrl}/config.json`);
       if (!response.ok) {
         console.warn('config.json not found');
         return;
