@@ -28,6 +28,36 @@ async function init() {
             return;
         }
         
+        // Check for floating controls
+        const floatingControls = document.getElementById('floating-controls');
+        console.log('[DEBUG] Floating controls element:', floatingControls);
+        if (floatingControls) {
+            const computedStyle = window.getComputedStyle(floatingControls);
+            const rect = floatingControls.getBoundingClientRect();
+            console.log('[DEBUG] Floating controls display:', computedStyle.display);
+            console.log('[DEBUG] Floating controls visibility:', computedStyle.visibility);
+            console.log('[DEBUG] Floating controls z-index:', computedStyle.zIndex);
+            console.log('[DEBUG] Floating controls position:', computedStyle.position);
+            console.log('[DEBUG] Floating controls top:', computedStyle.top);
+            console.log('[DEBUG] Floating controls right:', computedStyle.right);
+            console.log('[DEBUG] Floating controls bounding rect:', rect);
+            console.log('[DEBUG] Floating controls children:', floatingControls.children.length);
+            
+            // Check each button
+            Array.from(floatingControls.children).forEach((child, i) => {
+                const childStyle = window.getComputedStyle(child);
+                console.log(`[DEBUG] Button ${i} (${child.id}):`, {
+                    display: childStyle.display,
+                    visibility: childStyle.visibility,
+                    opacity: childStyle.opacity
+                });
+            });
+            
+            console.log('[DEBUG] Window inner width:', window.innerWidth);
+            console.log('[DEBUG] Window inner height:', window.innerHeight);
+            console.log('[DEBUG] Document body width:', document.body.clientWidth);
+        }
+        
         console.log('Container found, initializing plot...');
         const plot = new ScatterGL(container);
         

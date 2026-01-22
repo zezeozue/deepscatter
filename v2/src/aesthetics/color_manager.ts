@@ -1,5 +1,5 @@
-import { ScatterGL } from '../core/scatter_gl';
 import { Tile } from '../data/tile';
+import { TileStore } from '../data/tile_store';
 
 export interface ColorScale {
   type: 'numeric' | 'categorical';
@@ -42,7 +42,7 @@ export class ColorManager {
    * Create a numeric color scale with automatic log/linear detection
    * Can optionally use metadata for min/max instead of scanning tiles
    */
-  createNumericScale(field: string, tiles: Tile[], metadata?: {min: number, max: number}): ColorScale {
+  createNumericScale(field: string, tiles: Tile[], metadata?: {min: number, max: number}): ColorScale | null {
     let min: number;
     let max: number;
 
@@ -87,7 +87,7 @@ export class ColorManager {
       originalDomain: [min, max], // Store original values for legend
     } as any;
 
-    return this.currentScale;
+    return this.currentScale!;
   }
 
   /**
@@ -239,5 +239,118 @@ export class ColorManager {
    */
   clearScale(): void {
     this.currentScale = null;
+  }
+
+  /**
+   * Apply color encoding based on column type and metadata
+   */
+  applyColorEncoding(
+    field: string,
+    column: { numeric: boolean; categorical?: boolean },
+    metadata: { min?: number; max?: number; categories?: string[] } | undefined,
+    tileStore: TileStore
+  ): ColorScale | null {
+    if (column.numeric) {
+      return this.applyNumericEncoding(field, metadata, tileStore);
+    } else if (column.categorical) {
+      return this.applyCategoricalEncoding(field, metadata, tileStore);
+    }
+    
+    // Non-numeric, non-categorical - clear scale
+    this.clearScale();
+    return null;
+  }
+
+  private applyNumericEncoding(
+    field: string,
+    metadata: { min?: number; max?: number } | undefined,
+    tileStore: TileStore
+  ): ColorScale {
+    if (metadata?.min !== undefined && metadata?.max !== undefined) {
+      return this.createNumericScale(field, [], {
+        min: metadata.min,
+        max: metadata.max
+      })!;
+    }
+    
+    const root = tileStore.getRoot();
+    if (root) {
+      return this.createNumericScale(field, [root])!;
+    }
+    
+    // Fallback
+    return this.createNumericScale(field, [], { min: 0, max: 1 })!;
+  }
+
+  private applyCategoricalEncoding(
+    field: string,
+    metadata: { categories?: string[] } | undefined,
+    tileStore: TileStore
+  ): ColorScale {
+    if (metadata?.categories) {
+      return this.createCategoricalScaleFromList(field, metadata.categories);
+    }
+    
+    const root = tileStore.getRoot();
+    if (root) {
+      return this.createCategoricalScale(field, [root]);
+    }
+    
+    // Fallback
+    return this.createCategoricalScaleFromList(field, []);
+  }
+
+  /**
+   * Compute colors for a tile with optional filtering
+   */
+  computeTileColors(
+    tile: Tile,
+    currentScale: ColorScale | null,
+    visibleIndices: number[] | null
+  ): Float32Array {
+    if (!tile.data) return new Float32Array(0);
+    
+    const count = tile.data.numRows;
+    const colors = this.getBaseColors(tile, count, currentScale);
+    
+    if (visibleIndices === null) {
+      return colors;
+    }
+    
+    return this.applyVisibilityMask(colors, visibleIndices, count);
+  }
+
+  private getBaseColors(tile: Tile, count: number, currentScale: ColorScale | null): Float32Array {
+    if (currentScale) {
+      return this.applyToTile(tile, currentScale);
+    }
+    
+    // No color scale - use grey
+    const colors = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      colors[i * 3] = 0.5;
+      colors[i * 3 + 1] = 0.5;
+      colors[i * 3 + 2] = 0.5;
+    }
+    return colors;
+  }
+
+  private applyVisibilityMask(colors: Float32Array, visibleIndices: number[], count: number): Float32Array {
+    const filteredColors = new Float32Array(count * 3);
+    
+    for (let i = 0; i < count; i++) {
+      if (visibleIndices.includes(i)) {
+        filteredColors[i * 3] = colors[i * 3];
+        filteredColors[i * 3 + 1] = colors[i * 3 + 1];
+        filteredColors[i * 3 + 2] = colors[i * 3 + 2];
+      } else {
+        // Set to NaN to signal renderer to skip this point
+        filteredColors[i * 3] = NaN;
+        filteredColors[i * 3 + 1] = NaN;
+        filteredColors[i * 3 + 2] = NaN;
+      }
+    }
+    
+    return filteredColors;
   }
 }

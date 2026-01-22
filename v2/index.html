@@ -9,19 +9,9 @@
   <body>
     <div id="app-container">
       <div id="side-panel">
-        <div id="side-panel-header">
-          <div id="side-nav-row">
-            <button id="color-nav-btn" class="nav-btn" title="Color By">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 2a10 10 0 0 1 0 20"></path>
-              </svg>
-            </button>
-            <button id="filter-nav-btn" class="nav-btn" title="Filter">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-              </svg>
-            </button>
+        <div id="side-panel-header" style="border-bottom: 1px solid #000;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600;">Brush</h2>
             <button id="panel-collapse-btn" class="icon-btn" title="Close Panel">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -29,20 +19,51 @@
               </svg>
             </button>
           </div>
+          <div class="header-divider"></div>
+          <div id="side-nav-row">
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="theme-toggle" class="nav-btn" title="Toggle Theme">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+              </button>
+              <button id="import-csv-button" class="nav-btn" title="Import Data">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="color-nav-btn" class="nav-btn" title="Color By">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 2a10 10 0 0 1 0 20"></path>
+                </svg>
+              </button>
+              <button id="filter-nav-btn" class="nav-btn" title="Filter">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
         
         <div id="side-panel-content">
           <!-- Tooltip/Point Data Panel (Default) -->
           <div id="panel-tooltips" class="panel-view active">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <h3 style="margin: 0;">Point Data</h3>
-              <button id="select-mode-toggle" class="nav-btn" title="Toggle Selection Mode">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                </svg>
-              </button>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+              <h3 style="margin: 0;">Tooltip</h3>
+              <div style="display: flex; gap: 0.5rem;">
+                <button id="select-mode-toggle" class="nav-btn" title="Toggle Selection Mode">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div id="point-data"></div>
           </div>
@@ -91,26 +112,14 @@
       
       <div id="container">
         <div id="selection-rectangle"></div>
-        <div id="floating-controls">
-          <button id="panel-expand-btn" class="floating-btn hamburger-btn" title="Open Panel" style="display: none;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
-          <button id="theme-toggle" class="floating-btn" title="Toggle Theme">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-          </button>
-          <button id="import-csv-button" class="floating-btn" title="Import Data">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-        </div>
+        <!-- Hamburger button for expanding collapsed panel -->
+        <button id="panel-expand-btn" class="floating-btn hamburger-btn" title="Open Panel" style="display: none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -119,7 +128,7 @@
       <div class="panel-resize-handle"></div>
       <div class="bottom-panel-header">
         <div class="panel-header-left">
-          <h2>Region Actions</h2>
+          <h2>Region Selection</h2>
           <div class="selection-info">
             <span id="selection-count">0</span> points selected
           </div>
@@ -157,10 +166,26 @@
     <script type="module" src="./main.ts"></script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('theme-toggle').addEventListener('click', () => {
+        const themeToggle = document.getElementById('theme-toggle');
+        const appContainer = document.getElementById('app-container');
+        
+        // Update theme toggle visual state
+        const updateThemeToggleState = () => {
+          if (appContainer.classList.contains('dark-mode')) {
+            themeToggle.classList.add('active');
+          } else {
+            themeToggle.classList.remove('active');
+          }
+        };
+        
+        themeToggle.addEventListener('click', () => {
           document.body.classList.toggle('dark-mode');
-          document.getElementById('app-container').classList.toggle('dark-mode');
+          appContainer.classList.toggle('dark-mode');
+          updateThemeToggleState();
         });
+        
+        // Initialize theme toggle state
+        updateThemeToggleState();
 
         const importModal = document.getElementById('import-modal');
         const importCsvButton = document.getElementById('import-csv-button');
@@ -193,12 +218,14 @@
               panel.classList.add('active');
             }
             
-            // Update nav button states (but preserve select-mode-toggle state)
+            // Update nav button states (but preserve select-mode-toggle and theme-toggle state)
             const selectModeToggle = document.getElementById('select-mode-toggle');
             const selectModeActive = selectModeToggle?.classList.contains('active');
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeActive = themeToggle?.classList.contains('active');
             
             document.querySelectorAll('.nav-btn').forEach(btn => {
-              if (btn.id !== 'select-mode-toggle') {
+              if (btn.id !== 'select-mode-toggle' && btn.id !== 'theme-toggle') {
                 btn.classList.remove('active');
               }
             });
@@ -207,16 +234,33 @@
             if (selectModeActive && selectModeToggle) {
               selectModeToggle.classList.add('active');
             }
+            // Restore theme toggle state if it was active
+            if (themeActive && themeToggle) {
+              themeToggle.classList.add('active');
+            }
           };
 
-          document.getElementById('color-nav-btn').addEventListener('click', () => {
-            openPanel('panel-color');
-            document.getElementById('color-nav-btn').classList.add('active');
+          const colorNavBtn = document.getElementById('color-nav-btn');
+          const filterNavBtn = document.getElementById('filter-nav-btn');
+          
+          colorNavBtn.addEventListener('click', () => {
+            // Toggle: if already active, go back to tooltips
+            if (colorNavBtn.classList.contains('active')) {
+              openPanel('panel-tooltips');
+            } else {
+              openPanel('panel-color');
+              colorNavBtn.classList.add('active');
+            }
           });
           
-          document.getElementById('filter-nav-btn').addEventListener('click', () => {
-            openPanel('panel-filter');
-            document.getElementById('filter-nav-btn').classList.add('active');
+          filterNavBtn.addEventListener('click', () => {
+            // Toggle: if already active, go back to tooltips
+            if (filterNavBtn.classList.contains('active')) {
+              openPanel('panel-tooltips');
+            } else {
+              openPanel('panel-filter');
+              filterNavBtn.classList.add('active');
+            }
           });
           
           document.querySelectorAll('.back-button').forEach(btn => {
