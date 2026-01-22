@@ -1,3 +1,4 @@
+import m from 'mithril';
 import { Renderer } from '../rendering/renderer';
 import { RenderSpec } from '../types';
 import { TileStore } from '../data/tile_store';
@@ -7,6 +8,25 @@ import { colorScale, Scale } from '../aesthetics/scales';
 import { Table, Vector, makeVector, Float32, Utf8, vectorFromArray } from 'apache-arrow';
 import { ColorManager, ColorScale } from '../aesthetics/color_manager';
 import { FilterManager } from '../aesthetics/filter_manager';
+import { ColorSelector, FilterSelector, PointInfo, FilterControls } from './components';
+
+interface Column {
+  name: string;
+  numeric: boolean;
+  categorical?: boolean;
+}
+
+interface ColumnMetadata {
+  min?: number;
+  max?: number;
+  categories?: string[];
+  num_categories?: number;
+}
+
+interface PointSelection {
+  tileKey: string;
+  index: number;
+}
 
 export class ScatterGL {
   private container: HTMLElement;
@@ -15,15 +35,14 @@ export class ScatterGL {
   private tileStore: TileStore;
   private controller: Controller;
   private transform: Transform = { k: 1, x: 0, y: 0 };
-  private renderId: number | null = null;
   
   private spec: RenderSpec = { x: 'x', y: 'y' };
   private specVersion: number = 0;
-  private hoveredPoint: {tileKey: string, index: number} | null = null;
-  private lockedPoint: {tileKey: string, index: number} | null = null;
+  private hoveredPoint: PointSelection | null = null;
+  private lockedPoint: PointSelection | null = null;
   private baseK: number = 1.0;
-  private columns: {name: string, numeric: boolean, categorical?: boolean, min?: number, max?: number}[] = [];
-  private columnMetadata: Map<string, {min?: number, max?: number, categories?: string[], num_categories?: number}> = new Map();
+  private columns: Column[] = [];
+  private columnMetadata = new Map<string, ColumnMetadata>();
   
   public colorManager: ColorManager = new ColorManager();
   public filterManager: FilterManager = new FilterManager();
@@ -40,7 +59,7 @@ export class ScatterGL {
     // Initialize components
     this.renderer = new Renderer(this.canvas);
     this.tileStore = new TileStore();
-    this.tileStore.onTileLoad = () => this.scheduleRender();
+    this.tileStore.onTileLoad = () => this.render();
 
     // Initial resize
     this.resize();
@@ -135,28 +154,18 @@ export class ScatterGL {
     const navbar = document.getElementById('point-data');
     if (!navbar) return;
 
-    if (result === -1) {
+    if (result === -1 || !result.tile.data) {
         navbar.innerHTML = '';
         return;
     }
 
-    const { tile, index } = result;
-    if (!tile.data) return;
-
-    const row = tile.data.get(index);
+    const row = result.tile.data.get(result.index);
     if (!row) {
         navbar.innerHTML = '';
         return;
     }
 
-    const data = row.toJSON();
-    const html = Object.entries(data).map(([k, v]) => `
-      <div class="point-row">
-        <span class="point-key">${k}</span>
-        <span class="point-value">${v}</span>
-      </div>
-    `).join('');
-    navbar.innerHTML = html;
+    m.render(navbar, m(PointInfo, { data: row.toJSON() }));
   }
 
   private resize() {
@@ -341,48 +350,46 @@ export class ScatterGL {
         };
     });
 
-    const colorBy = document.getElementById('color-by-selector') as HTMLSelectElement;
-    const filterBy = document.getElementById('filter-by-selector') as HTMLSelectElement;
-
+    const colorBy = document.getElementById('color-by-selector');
+    const filterBy = document.getElementById('filter-by-selector');
+    
     if (colorBy) {
-        // Remove old event listeners by replacing the element
-        const newColorBy = colorBy.cloneNode(false) as HTMLSelectElement;
-        colorBy.parentNode?.replaceChild(newColorBy, colorBy);
+        // Render just the selector
+        const tempDiv = document.createElement('div');
+        m.render(tempDiv, m(ColorSelector, {
+            columns: this.columns,
+            onChange: (field: string) => this.applyColorEncoding(field)
+        }));
         
-        newColorBy.innerHTML = '';
-        this.columns.forEach(c => {
-            const option = document.createElement('option');
-            option.value = c.name;
-            option.textContent = c.name;
-            newColorBy.appendChild(option);
-        });
-        
-        newColorBy.addEventListener('change', () => this.applyColorEncoding(newColorBy.value));
-        
-        // Apply default color encoding if columns exist
-        if (this.columns.length > 0) {
-            setTimeout(() => this.applyColorEncoding(newColorBy.value), 100);
+        // Replace the old select with the new one
+        const newSelect = tempDiv.firstChild as HTMLSelectElement;
+        if (newSelect && colorBy.parentNode) {
+            colorBy.parentNode.replaceChild(newSelect, colorBy);
+            
+            // Apply default color encoding if columns exist
+            if (this.columns.length > 0) {
+                setTimeout(() => this.applyColorEncoding(newSelect.value), 100);
+            }
         }
     }
-
+    
     if (filterBy) {
-        // Remove old event listeners by replacing the element
-        const newFilterBy = filterBy.cloneNode(false) as HTMLSelectElement;
-        filterBy.parentNode?.replaceChild(newFilterBy, filterBy);
+        // Render just the selector
+        const tempDiv = document.createElement('div');
+        m.render(tempDiv, m(FilterSelector, {
+            columns: this.columns,
+            onChange: () => this.updateFilterControls()
+        }));
         
-        newFilterBy.innerHTML = '';
-        this.columns.forEach(c => {
-            const option = document.createElement('option');
-            option.value = c.name;
-            option.textContent = c.name;
-            newFilterBy.appendChild(option);
-        });
-        
-        newFilterBy.addEventListener('change', () => this.updateFilterControls());
-        
-        // Initialize filter controls
-        if (this.columns.length > 0) {
-            setTimeout(() => this.updateFilterControls(), 100);
+        // Replace the old select with the new one
+        const newSelect = tempDiv.firstChild;
+        if (newSelect && filterBy.parentNode) {
+            filterBy.parentNode.replaceChild(newSelect, filterBy);
+            
+            // Initialize filter controls
+            if (this.columns.length > 0) {
+                setTimeout(() => this.updateFilterControls(), 100);
+            }
         }
     }
   }
@@ -468,149 +475,17 @@ export class ScatterGL {
     const selected = this.columns.find(c => c.name === filterBy.value);
     if (!selected) return;
 
-    filterControls.innerHTML = '';
-
-    if (selected.numeric) {
-        const tiles = this.tileStore.getTiles();
-        const [min, max] = this.filterManager.getNumericRange(selected.name, tiles);
-        
-        const container = document.createElement('div');
-        container.style.display = 'flex';
-        container.style.gap = '5px';
-        container.style.marginTop = '10px';
-        
-        const minInput = document.createElement('input');
-        minInput.type = 'number';
-        minInput.placeholder = `Min (${min.toFixed(2)})`;
-        minInput.step = 'any';
-        minInput.style.flex = '1';
-        
-        const maxInput = document.createElement('input');
-        maxInput.type = 'number';
-        maxInput.placeholder = `Max (${max.toFixed(2)})`;
-        maxInput.step = 'any';
-        maxInput.style.flex = '1';
-
-        const applyBtn = document.createElement('button');
-        applyBtn.textContent = 'Apply';
-        applyBtn.style.marginTop = '5px';
-        applyBtn.addEventListener('click', () => {
-            const minVal = minInput.value ? parseFloat(minInput.value) : null;
-            const maxVal = maxInput.value ? parseFloat(maxInput.value) : null;
-            this.filterManager.setNumericFilter(selected.name, minVal, maxVal);
-            this.applyFilters();
-        });
-
-        container.appendChild(minInput);
-        container.appendChild(maxInput);
-        filterControls.appendChild(container);
-        filterControls.appendChild(applyBtn);
-    } else if (selected.categorical) {
-        // Categorical column - show dropdown
-        const tiles = this.tileStore.getTiles();
-        const uniqueValues = this.filterManager.getUniqueValues(selected.name, tiles);
-        
-        const label = document.createElement('label');
-        label.textContent = 'Select Value:';
-        label.style.display = 'block';
-        label.style.marginTop = '10px';
-        label.style.marginBottom = '5px';
-        label.style.fontWeight = '600';
-        label.style.fontSize = '0.9rem';
-        
-        const select = document.createElement('select');
-        select.style.width = '100%';
-        select.style.padding = '0.6rem';
-        select.style.marginBottom = '10px';
-        
-        // Add "All" option
-        const allOption = document.createElement('option');
-        allOption.value = '__ALL__';
-        allOption.textContent = 'All';
-        select.appendChild(allOption);
-        
-        uniqueValues.forEach(val => {
-            const option = document.createElement('option');
-            option.value = String(val);
-            option.textContent = String(val);
-            select.appendChild(option);
-        });
-
-        select.addEventListener('change', () => {
-            if (select.value === '__ALL__') {
-                this.filterManager.removeFilter(selected.name);
-            } else {
-                const selectedSet = new Set([select.value]);
-                this.filterManager.setCategoricalFilter(selected.name, selectedSet);
-            }
-            this.applyFilters();
-        });
-        
-        filterControls.appendChild(label);
-        filterControls.appendChild(select);
-    } else {
-        // String column (not categorical) - show text input for substring search
-        const label = document.createElement('label');
-        label.textContent = 'Search (substring):';
-        label.style.display = 'block';
-        label.style.marginTop = '10px';
-        label.style.marginBottom = '5px';
-        label.style.fontWeight = '600';
-        label.style.fontSize = '0.9rem';
-        
-        const textInput = document.createElement('input');
-        textInput.type = 'text';
-        textInput.placeholder = 'Enter text to search...';
-        textInput.style.width = '100%';
-        textInput.style.padding = '0.6rem';
-        textInput.style.marginBottom = '10px';
-        textInput.style.boxSizing = 'border-box';
-
-        const applyBtn = document.createElement('button');
-        applyBtn.textContent = 'Apply';
-        applyBtn.addEventListener('click', () => {
-            const searchText = textInput.value.trim();
-            if (searchText) {
-                this.filterManager.setStringFilter(selected.name, searchText);
-                this.applyFilters();
-            } else {
-                this.filterManager.removeFilter(selected.name);
-                this.applyFilters();
-            }
-        });
-
-        const clearBtn = document.createElement('button');
-        clearBtn.textContent = 'Clear';
-        clearBtn.style.marginLeft = '5px';
-        clearBtn.addEventListener('click', () => {
-            textInput.value = '';
-            this.filterManager.removeFilter(selected.name);
-            this.applyFilters();
-        });
-        
-        const btnContainer = document.createElement('div');
-        btnContainer.style.display = 'flex';
-        btnContainer.style.gap = '5px';
-        btnContainer.appendChild(applyBtn);
-        btnContainer.appendChild(clearBtn);
-        
-        filterControls.appendChild(label);
-        filterControls.appendChild(textInput);
-        filterControls.appendChild(btnContainer);
-    }
+    m.render(filterControls, m(FilterControls, {
+        column: selected,
+        tiles: this.tileStore.getTiles(),
+        filterManager: this.filterManager,
+        onApply: () => this.applyFilters()
+    }));
   }
 
   private applyFilters() {
       this.specVersion++;
       this.render();
-  }
-
-  private scheduleRender() {
-      if (this.renderId) return;
-      this.renderId = requestAnimationFrame(() => {
-          this.render();
-          this.renderId = null;
-      });
   }
 
   public render(spec?: RenderSpec) {
