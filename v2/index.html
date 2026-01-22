@@ -29,8 +29,11 @@
               <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem;">Keyboard Shortcuts</h4>
               <div class="shortcut-row"><kbd>W/A/S/D</kbd><span>Pan Up/Left/Down/Right</span></div>
               <div class="shortcut-row"><kbd>Q/E</kbd><span>Zoom In/Out at Cursor</span></div>
-              <div class="shortcut-row"><kbd>L</kbd><span>Toggle Selection Mode</span></div>
-              <div class="shortcut-row"><kbd>C</kbd><span>Recenter to Full Extent</span></div>
+              <div class="shortcut-row"><kbd>Z</kbd><span>Recenter to Extent</span></div>
+              <div class="shortcut-row"><kbd>C</kbd><span>Toggle Color By Panel</span></div>
+              <div class="shortcut-row"><kbd>F</kbd><span>Toggle Filter Panel</span></div>
+              <div class="shortcut-row"><kbd>X</kbd><span>Toggle Side Panel</span></div>
+              <div class="shortcut-row"><kbd>R</kbd><span>Toggle Region Selection</span></div>
             </div>
           </div>
           <div class="header-divider"></div>
@@ -284,6 +287,7 @@
             // Toggle: if already active, go back to tooltips
             if (colorNavBtn.classList.contains('active')) {
               openPanel('panel-tooltips');
+              // openPanel already removed active class, don't add it back
             } else {
               openPanel('panel-color');
               colorNavBtn.classList.add('active');
@@ -294,6 +298,7 @@
             // Toggle: if already active, go back to tooltips
             if (filterNavBtn.classList.contains('active')) {
               openPanel('panel-tooltips');
+              // openPanel already removed active class, don't add it back
             } else {
               openPanel('panel-filter');
               filterNavBtn.classList.add('active');

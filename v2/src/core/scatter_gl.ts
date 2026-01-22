@@ -318,9 +318,14 @@ export class ScatterGL {
   private removeFilter(field: string): void {
     this.filterManager.removeFilter(field);
     
-    // If the removed filter is currently selected in the dropdown, clear the controls
+    // If the removed filter is currently selected in the dropdown, switch to first column
     const filterSelector = document.getElementById('filter-by-selector') as HTMLSelectElement;
     if (filterSelector && filterSelector.value === field) {
+      // Switch to the first column
+      if (this.columns.length > 0) {
+        filterSelector.value = this.columns[0].name;
+      }
+      // Clear the filter controls
       const filterControls = document.getElementById('filter-controls');
       if (filterControls) {
         filterControls.innerHTML = '';

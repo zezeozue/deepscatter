@@ -167,11 +167,46 @@ function setupKeyboardBindings(plot: any) {
                 e.preventDefault();
                 zoomAtPoint(plot, lastMouseX, lastMouseY, 1 / zoomFactor);
                 break;
-            case 'c': // Recenter to full extent
+            case 'z': // Recenter to full extent (or filtered extent)
                 e.preventDefault();
                 recenterToFullExtent(plot);
                 break;
-            case 'l': // Toggle selection mode
+            case 'c': // Toggle Color By panel
+                e.preventDefault();
+                {
+                    const colorNavBtn = document.getElementById('color-nav-btn');
+                    if (colorNavBtn) {
+                        colorNavBtn.click();
+                    }
+                }
+                break;
+            case 'f': // Toggle Filter panel
+                e.preventDefault();
+                {
+                    const filterNavBtn = document.getElementById('filter-nav-btn');
+                    if (filterNavBtn) {
+                        filterNavBtn.click();
+                    }
+                }
+                break;
+            case 'x': // Toggle side panel
+                e.preventDefault();
+                {
+                    const sidePanel = document.getElementById('side-panel');
+                    const expandBtn = document.getElementById('panel-expand-btn');
+                    const collapseBtn = document.getElementById('panel-collapse-btn');
+                    
+                    if (sidePanel && expandBtn && collapseBtn) {
+                        // Check if panel is collapsed (width is 0)
+                        if (sidePanel.offsetWidth === 0) {
+                            expandBtn.click();
+                        } else {
+                            collapseBtn.click();
+                        }
+                    }
+                }
+                break;
+            case 'r': // Toggle region selection mode
                 e.preventDefault();
                 selectionModeActive = !selectionModeActive;
                 const selectModeToggle = document.getElementById('select-mode-toggle');
@@ -203,6 +238,9 @@ function recenterToFullExtent(plot: any) {
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     
+    // Check if filters are active
+    const hasFilters = plot.filterManager.hasFilters();
+    
     // Calculate extent from all loaded tiles
     for (const tile of allTiles) {
         if (!tile.data) continue;
@@ -212,8 +250,17 @@ function recenterToFullExtent(plot: any) {
         
         if (!xCol || !yCol) continue;
         
+        // If filters are active, get the visibility mask
+        let mask: Uint8Array | null = null;
+        if (hasFilters) {
+            mask = plot.filterManager.applyToTile(tile);
+        }
+        
         const numRows = tile.data.numRows;
         for (let i = 0; i < numRows; i++) {
+            // Skip filtered out points
+            if (mask && mask[i] === 0) continue;
+            
             const x = xCol.get(i);
             const y = yCol.get(i);
             

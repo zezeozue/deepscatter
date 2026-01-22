@@ -252,8 +252,11 @@ export class Renderer {
       
       const state = this.tileStates.get(tile.key)!;
       
-      if (colors.length / 3 !== state.count) {
-          console.warn(`Color buffer size mismatch for tile ${tile.key}`);
+      // Detect if we have RGB (3) or RGBA (4) components
+      const componentsPerPoint = colors.length / state.count;
+      
+      if (componentsPerPoint !== 3 && componentsPerPoint !== 4) {
+          console.warn(`Color buffer size mismatch for tile ${tile.key}: expected 3 or 4 components, got ${componentsPerPoint}`);
           return;
       }
 
@@ -263,7 +266,7 @@ export class Renderer {
       const colorLoc = this.gl.getAttribLocation(this.program, 'color');
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
       this.gl.enableVertexAttribArray(colorLoc);
-      this.gl.vertexAttribPointer(colorLoc, 3, this.gl.FLOAT, false, 0, 0);
+      this.gl.vertexAttribPointer(colorLoc, componentsPerPoint, this.gl.FLOAT, false, 0, 0);
       this.gl.bindVertexArray(null);
   }
 

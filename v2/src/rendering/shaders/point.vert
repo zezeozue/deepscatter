@@ -2,14 +2,14 @@
 precision highp float;
 
 in vec2 position;
-in vec3 color;
+in vec4 color;
 
 uniform vec2 u_resolution;
 uniform float u_k;
 uniform vec2 u_t;
 uniform float u_k_min; // Initial zoom level (physical)
 
-out vec3 vColor;
+out vec4 vColor;
 
 void main() {
   vec2 screen_pos = position * u_k + u_t;
@@ -25,5 +25,7 @@ void main() {
   float ratio = u_k / max(u_k_min, 0.00001);
   gl_PointSize = clamp(ratio * 4.0, 2.0, 20.0);
   
+  // Handle both RGB (3 components) and RGBA (4 components)
+  // If only 3 components, alpha defaults to 1.0
   vColor = color;
 }

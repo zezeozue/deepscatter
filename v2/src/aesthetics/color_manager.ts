@@ -302,6 +302,7 @@ export class ColorManager {
 
   /**
    * Compute colors for a tile with optional filtering
+   * Returns RGBA colors (4 components per point) when filtering is active
    */
   computeTileColors(
     tile: Tile,
@@ -317,7 +318,7 @@ export class ColorManager {
       return colors;
     }
     
-    return this.applyVisibilityMask(colors, visibleIndices, count);
+    return this.applyVisibilityMaskWithAlpha(colors, visibleIndices, count);
   }
 
   private getBaseColors(tile: Tile, count: number, currentScale: ColorScale | null): Float32Array {
@@ -335,20 +336,19 @@ export class ColorManager {
     return colors;
   }
 
-  private applyVisibilityMask(colors: Float32Array, visibleIndices: number[], count: number): Float32Array {
-    const filteredColors = new Float32Array(count * 3);
+  private applyVisibilityMaskWithAlpha(colors: Float32Array, visibleIndices: number[], count: number): Float32Array {
+    // Return RGBA colors with alpha channel
+    const filteredColors = new Float32Array(count * 4);
+    
+    // Create a Set for O(1) lookup
+    const visibleSet = new Set(visibleIndices);
     
     for (let i = 0; i < count; i++) {
-      if (visibleIndices.includes(i)) {
-        filteredColors[i * 3] = colors[i * 3];
-        filteredColors[i * 3 + 1] = colors[i * 3 + 1];
-        filteredColors[i * 3 + 2] = colors[i * 3 + 2];
-      } else {
-        // Set to NaN to signal renderer to skip this point
-        filteredColors[i * 3] = NaN;
-        filteredColors[i * 3 + 1] = NaN;
-        filteredColors[i * 3 + 2] = NaN;
-      }
+      filteredColors[i * 4] = colors[i * 3];
+      filteredColors[i * 4 + 1] = colors[i * 3 + 1];
+      filteredColors[i * 4 + 2] = colors[i * 3 + 2];
+      // Set alpha: 1.0 for visible, 0.0 for filtered
+      filteredColors[i * 4 + 3] = visibleSet.has(i) ? 1.0 : 0.0;
     }
     
     return filteredColors;
