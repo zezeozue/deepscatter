@@ -62,6 +62,7 @@ body, html {
   transition: width 0.3s ease, min-width 0.3s ease, border 0.3s ease;
   overflow: hidden;
   flex-shrink: 0;
+  z-index: 100;
 }
 
 #side-panel-header {
@@ -179,7 +180,7 @@ body, html {
 
 /* Floating Controls */
 #floating-controls {
-  position: absolute;
+  position: fixed;
   top: 1rem;
   right: 1rem;
   display: flex;
@@ -472,4 +473,242 @@ body.dark-mode .modal-content button:hover {
   content: 'Hover over points to see data';
   color: #999;
   font-style: italic;
+}
+
+/* Selection Rectangle */
+#selection-rectangle {
+  position: absolute;
+  border: 2px dashed #007bff;
+  background-color: rgba(0, 123, 255, 0.1);
+  display: none;
+  z-index: 50;
+  pointer-events: none;
+  top: 0;
+  left: 0;
+}
+
+/* Bottom Action Panel */
+.bottom-action-panel {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30vh;
+  min-height: 150px;
+  max-height: 80vh;
+  background-color: #fefefe;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  z-index: 1000;
+  transition: height 0.3s ease;
+}
+
+.bottom-action-panel.open {
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-action-panel.collapsed {
+  height: 48px !important;
+  min-height: 48px;
+}
+
+.bottom-action-panel.collapsed .bottom-panel-body {
+  display: none;
+}
+
+.panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  background-color: transparent;
+  z-index: 10;
+}
+
+.panel-resize-handle:hover {
+  background-color: rgba(33, 150, 243, 0.2);
+}
+
+.panel-resize-handle:active {
+  background-color: rgba(33, 150, 243, 0.4);
+}
+
+.bottom-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  flex-shrink: 0;
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottom-panel-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.panel-collapse-button,
+.panel-close-button {
+  color: #6c757d;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.panel-collapse-button:hover,
+.panel-close-button:hover {
+  color: #495057;
+  background-color: #e9ecef;
+}
+
+.bottom-panel-body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.selection-info {
+  background-color: #e3f2fd;
+  color: #1565c0;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.chart-section {
+  margin-bottom: 16px;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chart-select {
+  padding: 6px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 14px;
+  background-color: white;
+  height: 32px;
+  box-sizing: border-box;
+  min-width: 150px;
+}
+
+.primary-button {
+  padding: 6px 16px;
+  background-color: #007bff;
+  border: none;
+  border-radius: 3px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.primary-button:hover {
+  background-color: #0056b3;
+}
+
+#chart-container {
+  min-height: 200px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Dark mode for bottom panel */
+body.dark-mode .bottom-action-panel {
+  background-color: #2a2a2a;
+  border-top-color: #444;
+}
+
+body.dark-mode .bottom-panel-header {
+  background-color: #333;
+  border-bottom-color: #444;
+}
+
+body.dark-mode .bottom-panel-header h2 {
+  color: #fff;
+}
+
+body.dark-mode .panel-collapse-button,
+body.dark-mode .panel-close-button {
+  color: #aaa;
+}
+
+body.dark-mode .panel-collapse-button:hover,
+body.dark-mode .panel-close-button:hover {
+  color: #fff;
+  background-color: #444;
+}
+
+body.dark-mode .selection-info {
+  background-color: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
+}
+
+body.dark-mode .chart-select {
+  background-color: #444;
+  border-color: #666;
+  color: #fff;
+}
+
+body.dark-mode #chart-container {
+  background: #333;
+  border-color: #555;
+  color: #fff;
+}
+
+body.dark-mode #chart-container p {
+  color: #fff;
+}
+
+/* Vega tooltip dark mode */
+body.dark-mode #vg-tooltip-element {
+  background-color: #333 !important;
+  color: #fff !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode #vg-tooltip-element .key {
+  color: #aaa !important;
+}
+
+body.dark-mode #vg-tooltip-element .value {
+  color: #fff !important;
 }

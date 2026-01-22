@@ -164,7 +164,7 @@ export class SelectionManager {
       
       this.startX = e.clientX - svgRect.left;
       this.startY = e.clientY - svgRect.top;
-    }, true);
+    });
 
     // Mousemove - draw selection rectangle
     this.deepscatterDiv.addEventListener('mousemove', (e: MouseEvent) => {
@@ -220,7 +220,7 @@ export class SelectionManager {
         selectionRectangle.style.left = `${left}px`;
         selectionRectangle.style.top = `${top}px`;
       }
-    }, true);
+    });
 
     // Mouseup - complete selection
     this.deepscatterDiv.addEventListener('mouseup', async (e: MouseEvent) => {

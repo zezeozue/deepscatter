@@ -22,13 +22,6 @@
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
               </svg>
             </button>
-            <button id="select-nav-btn" class="nav-btn" title="Select Region">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                <line x1="12" y1="22.08" x2="12" y2="12"></line>
-              </svg>
-            </button>
             <button id="panel-collapse-btn" class="icon-btn" title="Close Panel">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -41,7 +34,16 @@
         <div id="side-panel-content">
           <!-- Tooltip/Point Data Panel (Default) -->
           <div id="panel-tooltips" class="panel-view active">
-            <h3>Point Data</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <h3 style="margin: 0;">Point Data</h3>
+              <button id="select-mode-toggle" class="nav-btn" title="Toggle Selection Mode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+              </button>
+            </div>
             <div id="point-data"></div>
           </div>
 
@@ -88,6 +90,7 @@
       </div>
       
       <div id="container">
+        <div id="selection-rectangle"></div>
         <div id="floating-controls">
           <button id="panel-expand-btn" class="floating-btn hamburger-btn" title="Open Panel" style="display: none;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -108,6 +111,38 @@
             </svg>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Bottom Action Panel for Region Selection -->
+    <div id="action-panel" class="bottom-action-panel">
+      <div class="panel-resize-handle"></div>
+      <div class="bottom-panel-header">
+        <div class="panel-header-left">
+          <h2>Region Actions</h2>
+          <div class="selection-info">
+            <span id="selection-count">0</span> points selected
+          </div>
+        </div>
+        <div class="panel-header-right">
+          <button class="panel-collapse-button" title="Collapse">−</button>
+          <span class="panel-close-button" title="Close">&times;</span>
+        </div>
+      </div>
+
+      <div class="bottom-panel-body">
+        <div class="chart-section">
+          <div class="chart-controls">
+            <select id="column-selector" class="chart-select"></select>
+            <select id="action-selector" class="chart-select">
+              <option value="chart">Chart</option>
+              <option value="export">Export CSV</option>
+            </select>
+            <button id="execute-button" class="primary-button">Execute</button>
+          </div>
+        </div>
+
+        <div id="chart-container"></div>
       </div>
     </div>
     <script>
@@ -158,8 +193,20 @@
               panel.classList.add('active');
             }
             
-            // Update nav button states
-            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            // Update nav button states (but preserve select-mode-toggle state)
+            const selectModeToggle = document.getElementById('select-mode-toggle');
+            const selectModeActive = selectModeToggle?.classList.contains('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+              if (btn.id !== 'select-mode-toggle') {
+                btn.classList.remove('active');
+              }
+            });
+            
+            // Restore select mode state if it was active
+            if (selectModeActive && selectModeToggle) {
+              selectModeToggle.classList.add('active');
+            }
           };
 
           document.getElementById('color-nav-btn').addEventListener('click', () => {
@@ -170,11 +217,6 @@
           document.getElementById('filter-nav-btn').addEventListener('click', () => {
             openPanel('panel-filter');
             document.getElementById('filter-nav-btn').classList.add('active');
-          });
-          
-          document.getElementById('select-nav-btn').addEventListener('click', () => {
-            openPanel('panel-select');
-            document.getElementById('select-nav-btn').classList.add('active');
           });
           
           document.querySelectorAll('.back-button').forEach(btn => {

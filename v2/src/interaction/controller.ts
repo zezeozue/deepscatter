@@ -70,4 +70,17 @@ export class Controller {
       
       this.onUpdate({ k: t.k, x: t.x, y: t.y });
   }
+
+  public disable() {
+    select(this.element).on('.zoom', null);
+  }
+
+  public enable() {
+    select(this.element).call(this.zoomBehavior);
+  }
+
+  public get transform(): Transform {
+    const t = zoomIdentity;
+    return { k: t.k, x: t.x, y: t.y };
+  }
 }

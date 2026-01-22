@@ -297,8 +297,16 @@ export class ScatterGL {
                 const colMax = Math.max(...colData);
                 this.columnMetadata.set(key, { min: colMin, max: colMax });
             } else {
+                // Non-numeric column - treat as categorical
                 const colData = data.map(d => String(d[key] ?? ''));
                 acc[key] = vectorFromArray(colData, new Utf8());
+                
+                // Collect unique values for categorical columns
+                const uniqueValues = Array.from(new Set(colData));
+                this.columnMetadata.set(key, {
+                    categories: uniqueValues,
+                    num_categories: uniqueValues.length
+                });
             }
         }
         return acc;
@@ -690,5 +698,50 @@ export class ScatterGL {
 
       this.renderer.updateAesthetics(tile, colors);
       tile.visualsVersion = this.specVersion;
+  }
+
+  /**
+   * Convert screen coordinates to data coordinates
+   */
+  public screenToData(screenX: number, screenY: number): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    const { width, height } = this.canvas;
+    const baseScale = Math.min(width, height);
+    const dpr = window.devicePixelRatio;
+    
+    // Convert screen coordinates to physical pixels
+    const physicalX = screenX * dpr;
+    const physicalY = screenY * dpr;
+    
+    // Apply inverse transform
+    const tx = this.transform.x * dpr;
+    const ty = this.transform.y * dpr;
+    const k = this.transform.k * baseScale;
+    
+    const dataX = (physicalX - tx) / k;
+    const dataY = (physicalY - ty) / k;
+    
+    return { x: dataX, y: dataY };
+  }
+
+  /**
+   * Get the current transform
+   */
+  public getTransform(): Transform {
+    return { ...this.transform };
+  }
+
+  /**
+   * Get the tile store for accessing tiles
+   */
+  public getTileStore(): TileStore {
+    return this.tileStore;
+  }
+
+  /**
+   * Get the controller for enabling/disabling interaction
+   */
+  public getController(): Controller {
+    return this.controller;
   }
 }

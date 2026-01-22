@@ -118,7 +118,7 @@ export class TileStore {
           return;
       }
 
-      console.log(`Traverse: ${key} visible. Children: ${tile.children ? tile.children.length : 0}`);
+      // console.log(`Traverse: ${key} visible. Children: ${tile.children ? tile.children.length : 0}`);
 
       // Check children
       if (tile.children) {
